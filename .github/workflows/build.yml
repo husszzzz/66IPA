@@ -12,94 +12,40 @@ permissions:
 
 jobs:
   build:
-    name: Build Cinema 66 IPA
+    name: Build Cinema 66
     runs-on: macos-26
 
     steps:
 
-      # =========================================================
-      # CHECKOUT
-      # =========================================================
-
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
-
-
-      # =========================================================
-      # SELECT XCODE 26.6
-      # =========================================================
 
       - name: Select Xcode 26.6
         shell: bash
         run: |
           set -e
 
-          XCODE_APP="/Applications/Xcode_26.6.app"
+          sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
 
-          if [ ! -d "$XCODE_APP" ]; then
-            echo "ERROR: Xcode 26.6 not found."
-            echo "Available Xcode versions:"
-            ls -d /Applications/Xcode*.app 2>/dev/null || true
-            exit 1
-          fi
-
-          sudo xcode-select -s "$XCODE_APP/Contents/Developer"
-
-          echo "=========================================="
-          echo "XCODE"
-          echo "=========================================="
-
+          echo "Xcode:"
           xcodebuild -version
-          xcode-select -p
 
+          echo "SDK:"
+          xcrun --sdk iphoneos --show-sdk-version
 
-      # =========================================================
-      # CHECK IOS SDK
-      # =========================================================
-
-      - name: Verify iOS SDK
-        shell: bash
-        run: |
-          set -e
-
-          echo "=========================================="
-          echo "IOS SDK"
-          echo "=========================================="
-
-          xcodebuild -showsdks
-
-          SDK_VERSION=$(xcrun --sdk iphoneos --show-sdk-version)
-
-          echo ""
-          echo "iPhoneOS SDK: $SDK_VERSION"
-
-          if [ "$SDK_VERSION" != "26.5" ]; then
-            echo "WARNING: Expected 26.5 but found $SDK_VERSION"
-          fi
-
-
-      # =========================================================
-      # LOCATE SOURCE ARCHIVE
-      # =========================================================
-
-      - name: Locate source archive
+      - name: Find source archive
         shell: bash
         run: |
           set -e
 
           ARCHIVE=""
 
-          if [ -f "$GITHUB_WORKSPACE/Cinema66-iOS-Source.zip" ]; then
-            ARCHIVE="$GITHUB_WORKSPACE/Cinema66-iOS-Source.zip"
+          if [ -f "Cinema66-iOS-Source.zip" ]; then
+            ARCHIVE="Cinema66-iOS-Source.zip"
           else
-            ARCHIVE=$(
-              find "$GITHUB_WORKSPACE" \
-                -maxdepth 2 \
-                -type f \
-                \( -iname "*.zip" -o -iname "*.tar.gz" -o -iname "*.tgz" \) \
-                -not -path "*/.git/*" \
-                | head -n 1
-            )
+            ARCHIVE=$(find . -maxdepth 2 -type f \
+              \( -name "*.zip" -o -name "*.tar.gz" -o -name "*.tgz" \) \
+              -not -path "./.git/*" | head -n 1)
           fi
 
           if [ -z "$ARCHIVE" ]; then
@@ -107,125 +53,82 @@ jobs:
             exit 1
           fi
 
-          echo "SOURCE_ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
-
-          echo "Found archive:"
+          echo "Archive:"
           echo "$ARCHIVE"
 
-
-      # =========================================================
-      # EXTRACT SOURCE
-      # =========================================================
+          echo "SOURCE_ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
 
       - name: Extract source
         shell: bash
         run: |
           set -e
 
-          ROOT="$GITHUB_WORKSPACE/source_extracted"
-
-          rm -rf "$ROOT"
-          mkdir -p "$ROOT"
+          rm -rf source_extracted
+          mkdir -p source_extracted
 
           case "$SOURCE_ARCHIVE" in
-
             *.zip)
-              unzip -q "$SOURCE_ARCHIVE" -d "$ROOT"
+              unzip -q "$SOURCE_ARCHIVE" -d source_extracted
               ;;
-
             *.tar.gz)
-              tar -xzf "$SOURCE_ARCHIVE" -C "$ROOT"
+              tar -xzf "$SOURCE_ARCHIVE" -C source_extracted
               ;;
-
             *.tgz)
-              tar -xzf "$SOURCE_ARCHIVE" -C "$ROOT"
+              tar -xzf "$SOURCE_ARCHIVE" -C source_extracted
               ;;
-
             *)
               echo "ERROR: Unsupported archive."
               exit 1
               ;;
-
           esac
 
-          echo ""
-          echo "Extracted source:"
-          find "$ROOT" \
-            -maxdepth 5 \
-            -not -path "*/.git/*" \
-            -print \
-            | sort
+          echo "Source extracted."
 
-
-      # =========================================================
-      # FIND PROJECT.YML
-      # =========================================================
-
-      - name: Locate project.yml
+      - name: Find project.yml
         shell: bash
         run: |
           set -e
 
-          ROOT="$GITHUB_WORKSPACE/source_extracted"
-
-          echo "=========================================="
-          echo "SEARCHING FOR project.yml"
-          echo "=========================================="
-
-          PROJECT_YML=$(
-            find "$ROOT" \
-              -type f \
-              -name "project.yml" \
-              -not -path "*/.git/*" \
-              | head -n 1
-          )
+          PROJECT_YML=$(find "$GITHUB_WORKSPACE/source_extracted" \
+            -type f \
+            -name "project.yml" \
+            -not -path "*/.git/*" \
+            | head -n 1)
 
           if [ -z "$PROJECT_YML" ]; then
-            echo ""
-            echo "ERROR: project.yml was not found."
-            echo ""
-            echo "Files found:"
-            find "$ROOT" \
+            echo "ERROR: project.yml not found."
+
+            echo "Available files:"
+            find "$GITHUB_WORKSPACE/source_extracted" \
               -maxdepth 6 \
               -type f \
               -print \
               | sort
+
             exit 1
           fi
 
-          PROJECT_DIR="$(dirname "$PROJECT_YML")"
+          PROJECT_DIR=$(dirname "$PROJECT_YML")
 
-          echo ""
-          echo "project.yml found:"
+          echo "project.yml:"
           echo "$PROJECT_YML"
 
-          echo ""
           echo "Project directory:"
           echo "$PROJECT_DIR"
 
           echo "BUILD_PROJECT_YML=$PROJECT_YML" >> "$GITHUB_ENV"
           echo "BUILD_PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-
-      # =========================================================
-      # SHOW PROJECT.YML
-      # =========================================================
-
-      - name: Inspect project.yml
+      - name: Show project.yml
         shell: bash
         run: |
           set -e
 
           echo "=========================================="
-          echo "PROJECT.YML"
+          echo "project.yml"
           echo "=========================================="
 
           cat "$BUILD_PROJECT_YML"
-
-
-      # =========================================================
-      # INSTALL XCODEGEN
-      # =========================================================
 
       - name: Install XcodeGen
         shell: bash
@@ -236,79 +139,7 @@ jobs:
             brew install xcodegen
           fi
 
-          echo ""
-          echo "XcodeGen:"
           xcodegen --version
-
-
-      # =========================================================
-      # PATCH PROJECT.YML
-      # =========================================================
-      #
-      # This ensures the generated Xcode project has an explicit
-      # PRODUCT_BUNDLE_IDENTIFIER.
-      #
-      # If the project already contains one, it is preserved.
-      #
-      # =========================================================
-
-      - name: Ensure Bundle Identifier in project.yml
-        shell: bash
-        run: |
-          set -e
-
-          FILE="$BUILD_PROJECT_YML"
-
-          echo "=========================================="
-          echo "CHECKING BUNDLE IDENTIFIER"
-          echo "=========================================="
-
-          if grep -q "PRODUCT_BUNDLE_IDENTIFIER" "$FILE"; then
-
-            echo "PRODUCT_BUNDLE_IDENTIFIER already exists."
-
-          else
-
-            echo ""
-            echo "No PRODUCT_BUNDLE_IDENTIFIER found."
-            echo "Adding XcodeGen bundleIdPrefix..."
-
-            python3 - "$FILE" <<'PY'
-import sys
-
-path = sys.argv[1]
-
-with open(path, "r", encoding="utf-8") as f:
-    text = f.read()
-
-if "options:" in text:
-    if "bundleIdPrefix:" not in text:
-        text = text.replace(
-            "options:",
-            "options:\n  bundleIdPrefix: com.cinema66",
-            1
-        )
-else:
-    text = (
-        "options:\n"
-        "  bundleIdPrefix: com.cinema66\n\n"
-        + text
-    )
-
-with open(path, "w", encoding="utf-8") as f:
-    f.write(text)
-PY
-
-          fi
-
-          echo ""
-          echo "project.yml after bundle-ID check:"
-          cat "$FILE"
-
-
-      # =========================================================
-      # GENERATE XCODE PROJECT
-      # =========================================================
 
       - name: Generate Xcode project
         shell: bash
@@ -316,70 +147,50 @@ PY
         run: |
           set -e
 
-          echo "=========================================="
-          echo "XCODEGEN"
-          echo "=========================================="
-
           xcodegen generate
 
-          PROJECT=$(
-            find "$BUILD_PROJECT_DIR" \
-              -type d \
-              -name "*.xcodeproj" \
-              | head -n 1
-          )
+          PROJECT=$(find "$BUILD_PROJECT_DIR" \
+            -type d \
+            -name "*.xcodeproj" \
+            | head -n 1)
 
           if [ -z "$PROJECT" ]; then
-            echo "ERROR: XcodeGen did not create an xcodeproj."
+            echo "ERROR: XcodeGen did not create project."
             exit 1
           fi
 
-          echo ""
           echo "Generated project:"
           echo "$PROJECT"
 
           echo "BUILD_PROJECT=$PROJECT" >> "$GITHUB_ENV"
 
-
-      # =========================================================
-      # INSTALL COCOAPODS IF NEEDED
-      # =========================================================
-
-      - name: Install CocoaPods dependencies
+      - name: Install Pods if needed
         shell: bash
         run: |
           set -e
 
-          PODFILE=$(
-            find "$BUILD_PROJECT_DIR" \
-              -maxdepth 3 \
-              -type f \
-              -name "Podfile" \
-              | head -n 1 || true
-          )
+          PODFILE=$(find "$BUILD_PROJECT_DIR" \
+            -maxdepth 3 \
+            -type f \
+            -name "Podfile" \
+            | head -n 1 || true)
 
           if [ -z "$PODFILE" ]; then
-            echo "No Podfile found."
+            echo "No Podfile."
             exit 0
           fi
 
-          if ! command -v pod >/dev/null 2>&1; then
-            brew install cocoapods
-          fi
-
-          POD_DIR="$(dirname "$PODFILE")"
+          POD_DIR=$(dirname "$PODFILE")
 
           cd "$POD_DIR"
 
           pod install --repo-update
 
-          WORKSPACE=$(
-            find "$POD_DIR" \
-              -maxdepth 2 \
-              -type d \
-              -name "*.xcworkspace" \
-              | head -n 1 || true
-          )
+          WORKSPACE=$(find "$POD_DIR" \
+            -maxdepth 2 \
+            -type d \
+            -name "*.xcworkspace" \
+            | head -n 1 || true)
 
           if [ -n "$WORKSPACE" ]; then
             echo "BUILD_WORKSPACE=$WORKSPACE" >> "$GITHUB_ENV"
@@ -387,94 +198,53 @@ PY
             echo "$WORKSPACE"
           fi
 
-
-      # =========================================================
-      # INSPECT GENERATED PROJECT
-      # =========================================================
-
-      - name: Inspect generated project
+      - name: List project
         shell: bash
         run: |
           set -e
 
-          echo "=========================================="
-          echo "GENERATED PROJECT"
-          echo "=========================================="
-
-          if [ -n "${BUILD_WORKSPACE:-}" ] \
-            && [ -d "$BUILD_WORKSPACE" ]; then
-
+          if [ -n "${BUILD_WORKSPACE:-}" ]; then
             xcodebuild \
               -workspace "$BUILD_WORKSPACE" \
               -list
-
           else
-
             xcodebuild \
               -project "$BUILD_PROJECT" \
               -list
-
           fi
-
-
-      # =========================================================
-      # FIND SCHEME
-      # =========================================================
 
       - name: Detect scheme
         shell: bash
         run: |
           set -e
 
-          echo "=========================================="
-          echo "SCHEME"
-          echo "=========================================="
-
-          if [ -n "${BUILD_WORKSPACE:-}" ] \
-            && [ -d "$BUILD_WORKSPACE" ]; then
-
-            LIST=$(
-              xcodebuild \
-                -workspace "$BUILD_WORKSPACE" \
-                -list
-            )
-
+          if [ -n "${BUILD_WORKSPACE:-}" ]; then
+            LIST=$(xcodebuild \
+              -workspace "$BUILD_WORKSPACE" \
+              -list)
           else
-
-            LIST=$(
-              xcodebuild \
-                -project "$BUILD_PROJECT" \
-                -list
-            )
-
+            LIST=$(xcodebuild \
+              -project "$BUILD_PROJECT" \
+              -list)
           fi
-
-          echo "$LIST"
 
           SCHEME=""
 
           if echo "$LIST" | grep -qE '^[[:space:]]*Cinema66[[:space:]]*$'; then
             SCHEME="Cinema66"
-
           elif echo "$LIST" | grep -qE '^[[:space:]]*Cinema[[:space:]]*$'; then
             SCHEME="Cinema"
-
           else
-            SCHEME=$(
-              echo "$LIST" |
-              awk '
-                /Schemes:/ {
-                  found=1
-                  next
-                }
-
-                found && NF {
-                  gsub(/^[ \t]+|[ \t]+$/, "", $0)
-                  print
-                  exit
-                }
-              '
-            )
+            SCHEME=$(echo "$LIST" | awk '
+              /Schemes:/ {
+                found=1
+                next
+              }
+              found && NF {
+                gsub(/^[ \t]+|[ \t]+$/, "", $0)
+                print
+                exit
+              }')
           fi
 
           if [ -z "$SCHEME" ]; then
@@ -482,46 +252,28 @@ PY
             exit 1
           fi
 
-          echo ""
           echo "Selected scheme:"
           echo "$SCHEME"
 
           echo "BUILD_SCHEME=$SCHEME" >> "$GITHUB_ENV"
 
-
-      # =========================================================
-      # PREPARE OUTPUT
-      # =========================================================
-
-      - name: Prepare output
+      - name: Prepare build
         shell: bash
         run: |
           set -e
 
-          rm -rf "$GITHUB_WORKSPACE/build_output"
-          rm -rf "$GITHUB_WORKSPACE/ipa_output"
-          rm -rf "$GITHUB_WORKSPACE/ipa_inspection"
+          rm -rf build_output
+          rm -rf ipa_output
 
-          mkdir -p "$GITHUB_WORKSPACE/build_output"
-          mkdir -p "$GITHUB_WORKSPACE/ipa_output"
-          mkdir -p "$GITHUB_WORKSPACE/ipa_inspection"
-
-
-      # =========================================================
-      # BUILD
-      # =========================================================
+          mkdir -p build_output
+          mkdir -p ipa_output
 
       - name: Build unsigned app
         shell: bash
         run: |
           set -e
 
-          echo "=========================================="
-          echo "BUILDING"
-          echo "=========================================="
-
-          COMMON_ARGS=(
-
+          ARGS=(
             "-configuration"
             "Release"
 
@@ -535,28 +287,20 @@ PY
             "$GITHUB_WORKSPACE/build_output"
 
             "CODE_SIGNING_ALLOWED=NO"
-
             "CODE_SIGNING_REQUIRED=NO"
-
             "CODE_SIGN_IDENTITY="
-
             "CODE_SIGNING_INJECT_BASE_ENTITLEMENTS=NO"
-
             "PROVISIONING_PROFILE_SPECIFIER="
-
             "DEVELOPMENT_TEAM="
-
             "ONLY_ACTIVE_ARCH=NO"
-
           )
 
-          if [ -n "${BUILD_WORKSPACE:-}" ] \
-            && [ -d "$BUILD_WORKSPACE" ]; then
+          if [ -n "${BUILD_WORKSPACE:-}" ]; then
 
             xcodebuild \
               -workspace "$BUILD_WORKSPACE" \
               -scheme "$BUILD_SCHEME" \
-              "${COMMON_ARGS[@]}" \
+              "${ARGS[@]}" \
               build
 
           else
@@ -564,185 +308,64 @@ PY
             xcodebuild \
               -project "$BUILD_PROJECT" \
               -scheme "$BUILD_SCHEME" \
-              "${COMMON_ARGS[@]}" \
+              "${ARGS[@]}" \
               build
 
           fi
 
-          echo ""
-          echo "BUILD SUCCESSFUL"
-
-
-      # =========================================================
-      # LOCATE APP
-      # =========================================================
-
-      - name: Locate built app
+      - name: Find app
         shell: bash
         run: |
           set -e
 
-          APP_PATH=$(
-            find "$GITHUB_WORKSPACE/build_output" \
-              -type d \
-              -path "*/Build/Products/Release-iphoneos/*.app" \
-              | head -n 1 || true
-          )
+          APP=$(find "$GITHUB_WORKSPACE/build_output" \
+            -type d \
+            -path "*/Build/Products/Release-iphoneos/*.app" \
+            | head -n 1 || true)
 
-          if [ -z "$APP_PATH" ]; then
-            APP_PATH=$(
-              find "$GITHUB_WORKSPACE/build_output" \
-                -type d \
-                -name "*.app" \
-                | head -n 1 || true
-            )
+          if [ -z "$APP" ]; then
+            APP=$(find "$GITHUB_WORKSPACE/build_output" \
+              -type d \
+              -name "*.app" \
+              | head -n 1 || true)
           fi
 
-          if [ -z "$APP_PATH" ]; then
-            echo "ERROR: No .app found."
+          if [ -z "$APP" ]; then
+            echo "ERROR: App not found."
             exit 1
           fi
 
-          echo "APP_PATH=$APP_PATH" >> "$GITHUB_ENV"
+          echo "APP_PATH=$APP" >> "$GITHUB_ENV"
 
-          echo ""
           echo "App:"
-          echo "$APP_PATH"
+          echo "$APP"
 
-
-      # =========================================================
-      # VERIFY BUNDLE ID BEFORE IPA
-      # =========================================================
-
-      - name: Verify Bundle Identifier
+      - name: Verify Info.plist
         shell: bash
         run: |
           set -e
-
-          echo "=========================================="
-          echo "VERIFYING BUNDLE IDENTIFIER"
-          echo "=========================================="
 
           PLIST="$APP_PATH/Info.plist"
 
           if [ ! -f "$PLIST" ]; then
-            echo "ERROR: Info.plist not found."
+            echo "ERROR: Info.plist missing."
             exit 1
           fi
+
+          echo "Bundle ID:"
 
           BUNDLE_ID=$(
             /usr/libexec/PlistBuddy \
               -c "Print :CFBundleIdentifier" \
-              "$PLIST" \
-              2>/dev/null || true
+              "$PLIST"
           )
 
-          if [ -z "$BUNDLE_ID" ]; then
-            echo ""
-            echo "ERROR:"
-            echo "CFBundleIdentifier is missing from Info.plist."
-            echo ""
-            echo "Full Info.plist:"
-            /usr/libexec/PlistBuddy \
-              -c "Print" \
-              "$PLIST"
-            exit 1
-          fi
-
-          echo "CFBundleIdentifier:"
           echo "$BUNDLE_ID"
 
-          if [ "$BUNDLE_ID" != "com.cinema66.app" ]; then
-            echo ""
-            echo "WARNING:"
-            echo "Expected: com.cinema66.app"
-            echo "Found: $BUNDLE_ID"
-          fi
-
-
-      # =========================================================
-      # PACKAGE IPA
-      # =========================================================
-
-      - name: Package IPA
-        shell: bash
-        run: |
-          set -e
-
-          echo "=========================================="
-          echo "PACKAGING IPA"
-          echo "=========================================="
-
-          rm -rf "$GITHUB_WORKSPACE/ipa_output/Payload"
-
-          mkdir -p "$GITHUB_WORKSPACE/ipa_output/Payload"
-
-          cp -R \
-            "$APP_PATH" \
-            "$GITHUB_WORKSPACE/ipa_output/Payload/"
-
-          cd "$GITHUB_WORKSPACE/ipa_output"
-
-          zip \
-            -qry \
-            "Cinema66.ipa" \
-            "Payload"
-
-          echo ""
-          echo "IPA:"
-          ls -lh Cinema66.ipa
-
-
-      # =========================================================
-      # INSPECT FINAL IPA
-      # =========================================================
-
-      - name: Inspect final IPA
-        shell: bash
-        run: |
-          set -e
-
-          IPA="$GITHUB_WORKSPACE/ipa_output/Cinema66.ipa"
-          CHECK="$GITHUB_WORKSPACE/ipa_inspection"
-
-          echo "=========================================="
-          echo "FINAL IPA CHECK"
-          echo "=========================================="
-
-          file "$IPA"
-
-          echo ""
-          echo "ZIP TEST:"
-          unzip -t "$IPA"
-
-          rm -rf "$CHECK"
-          mkdir -p "$CHECK"
-
-          unzip -q "$IPA" -d "$CHECK"
-
-          APP=$(
-            find "$CHECK/Payload" \
-              -maxdepth 1 \
-              -type d \
-              -name "*.app" \
-              | head -n 1
-          )
-
-          if [ -z "$APP" ]; then
-            echo "ERROR: No .app inside Payload."
+          if [ -z "$BUNDLE_ID" ]; then
+            echo "ERROR: CFBundleIdentifier is empty."
             exit 1
           fi
-
-          echo ""
-          echo "App:"
-          echo "$APP"
-
-          echo ""
-          echo "Bundle ID:"
-
-          /usr/libexec/PlistBuddy \
-            -c "Print :CFBundleIdentifier" \
-            "$APP/Info.plist"
 
           echo ""
           echo "Executable:"
@@ -750,71 +373,121 @@ PY
           EXECUTABLE=$(
             /usr/libexec/PlistBuddy \
               -c "Print :CFBundleExecutable" \
-              "$APP/Info.plist"
+              "$PLIST"
           )
 
           echo "$EXECUTABLE"
 
-          if [ ! -f "$APP/$EXECUTABLE" ]; then
+          if [ ! -f "$APP_PATH/$EXECUTABLE" ]; then
             echo "ERROR: Executable missing."
             exit 1
           fi
 
           echo ""
-          echo "Executable file:"
+          echo "Version:"
 
-          file "$APP/$EXECUTABLE"
-
-          echo ""
-          echo "Architecture:"
-
-          lipo -info "$APP/$EXECUTABLE" 2>&1 || true
+          /usr/libexec/PlistBuddy \
+            -c "Print :CFBundleShortVersionString" \
+            "$PLIST" || true
 
           echo ""
-          echo "Code signature information:"
+          echo "Build:"
 
-          codesign -dvvv "$APP" 2>&1 || true
+          /usr/libexec/PlistBuddy \
+            -c "Print :CFBundleVersion" \
+            "$PLIST" || true
+
+      - name: Create IPA
+        shell: bash
+        run: |
+          set -e
+
+          rm -rf ipa_output/Payload
+
+          mkdir -p ipa_output/Payload
+
+          cp -R \
+            "$APP_PATH" \
+            ipa_output/Payload/
+
+          cd ipa_output
+
+          zip -qry \
+            "Cinema66.ipa" \
+            "Payload"
 
           echo ""
-          echo "Embedded provisioning profile:"
+          echo "IPA created:"
+          ls -lh Cinema66.ipa
 
-          if [ -f "$APP/embedded.mobileprovision" ]; then
-            echo "FOUND"
-          else
-            echo "NOT FOUND - expected for unsigned build"
+      - name: Final IPA verification
+        shell: bash
+        run: |
+          set -e
+
+          IPA="$GITHUB_WORKSPACE/ipa_output/Cinema66.ipa"
+
+          echo "=========================================="
+          echo "FINAL IPA CHECK"
+          echo "=========================================="
+
+          file "$IPA"
+
+          unzip -t "$IPA"
+
+          rm -rf "$GITHUB_WORKSPACE/final_check"
+
+          mkdir "$GITHUB_WORKSPACE/final_check"
+
+          unzip -q \
+            "$IPA" \
+            -d "$GITHUB_WORKSPACE/final_check"
+
+          APP=$(find "$GITHUB_WORKSPACE/final_check/Payload" \
+            -maxdepth 1 \
+            -type d \
+            -name "*.app" \
+            | head -n 1)
+
+          if [ -z "$APP" ]; then
+            echo "ERROR: Payload does not contain .app"
+            exit 1
           fi
 
           echo ""
-          echo "=========================================="
-          echo "IPA CHECK COMPLETE"
-          echo "=========================================="
+          echo "Final app:"
+          echo "$APP"
 
+          echo ""
+          echo "Final Bundle ID:"
 
-      # =========================================================
-      # UPLOAD IPA
-      # =========================================================
+          /usr/libexec/PlistBuddy \
+            -c "Print :CFBundleIdentifier" \
+            "$APP/Info.plist"
 
-      - name: Upload Cinema 66 IPA
+          echo ""
+          echo "Final executable:"
+
+          EXECUTABLE=$(
+            /usr/libexec/PlistBuddy \
+              -c "Print :CFBundleExecutable" \
+              "$APP/Info.plist"
+          )
+
+          if [ ! -f "$APP/$EXECUTABLE" ]; then
+            echo "ERROR: Final executable missing."
+            exit 1
+          fi
+
+          echo "$EXECUTABLE"
+
+          echo ""
+          echo "IPA verification successful."
+
+      - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
           name: Cinema66-IPA
           path: ipa_output/Cinema66.ipa
           if-no-files-found: error
           retention-days: 30
-
-
-      # =========================================================
-      # DIAGNOSTICS
-      # =========================================================
-
-      - name: Upload diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: Cinema66-Build-Diagnostics
-          path: |
-            build_output/
-            ipa_inspection/
-            ipa_output/
-          if-no-files-found: ignore
-          retention-days: 7
