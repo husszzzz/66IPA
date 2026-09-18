@@ -19,13 +19,13 @@ jobs:
     steps:
 
       # ==========================================
-      # 1. تحميل المستودع
+      # 1. Checkout
       # ==========================================
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       # ==========================================
-      # 2. اختيار Xcode 26
+      # 2. Select Xcode 26
       # ==========================================
       - name: Select Xcode 26
         shell: bash
@@ -44,7 +44,15 @@ jobs:
             /Applications/Xcode.app
           do
             if [ -d "$app" ]; then
-              VERSION=$("$app/Contents/Developer/usr/bin/xcodebuild" -version 2>/dev/null | head -n 1 || true)
+
+              VERSION=$(
+                "$app/Contents/Developer/usr/bin/xcodebuild" \
+                -version 2>/dev/null \
+                | head -n 1 || true
+              )
+
+              echo "Checking: $app"
+              echo "Version: $VERSION"
 
               if echo "$VERSION" | grep -q "Xcode 26"; then
                 XCODE_APP="$app"
@@ -55,27 +63,31 @@ jobs:
 
           if [ -z "$XCODE_APP" ]; then
             echo "ERROR: Xcode 26 was not found."
+
             echo ""
-            echo "Installed Xcode applications:"
+            echo "Installed Xcode versions:"
             ls -lah /Applications | grep -i Xcode || true
+
             exit 1
           fi
 
-          echo "Using:"
+          echo ""
+          echo "Using Xcode:"
           echo "$XCODE_APP"
 
-          sudo xcode-select -s "$XCODE_APP/Contents/Developer"
+          sudo xcode-select -s \
+            "$XCODE_APP/Contents/Developer"
 
           echo ""
           echo "Selected Xcode:"
           xcodebuild -version
 
           echo ""
-          echo "SDK:"
+          echo "iOS SDK:"
           xcrun --sdk iphoneos --show-sdk-version
 
       # ==========================================
-      # 3. عرض ملفات المستودع
+      # 3. Inspect repository
       # ==========================================
       - name: Inspect repository
         shell: bash
@@ -84,12 +96,14 @@ jobs:
           echo "Repository contents"
           echo "=========================================="
 
-          find . -maxdepth 3 \
+          find . \
+            -maxdepth 4 \
             -not -path "./.git/*" \
-            -print | sort
+            -print \
+            | sort
 
       # ==========================================
-      # 4. تحديد ملف المصدر المضغوط
+      # 4. Locate source archive
       # ==========================================
       - name: Locate source archive
         shell: bash
@@ -98,154 +112,233 @@ jobs:
 
           ARCHIVE=""
 
+          # الاسم الأساسي الذي نستخدمه
           if [ -f "Cinema66-iOS-Source.zip" ]; then
+
             ARCHIVE="Cinema66-iOS-Source.zip"
+
+          # دعم الملف القديم
           elif [ -f "ios_source.tar.gz" ]; then
+
             ARCHIVE="ios_source.tar.gz"
+
+          # البحث التلقائي عن أي ZIP
           else
-            ARCHIVE=$(find . -maxdepth 2 -type f \
-              \( -iname "*.zip" -o -iname "*.tar.gz" -o -iname "*.tgz" \) \
-              -not -path "./.git/*" \
-              | head -n 1)
+
+            ARCHIVE=$(
+              find . \
+                -maxdepth 2 \
+                -type f \
+                \( \
+                  -iname "*.zip" \
+                  -o \
+                  -iname "*.tar.gz" \
+                  -o \
+                  -iname "*.tgz" \
+                \) \
+                -not -path "./.git/*" \
+                | head -n 1
+            )
+
           fi
 
           if [ -z "$ARCHIVE" ]; then
+
             echo "ERROR: No source archive found."
+
             echo ""
-            echo "Expected one of:"
-            echo "  Cinema66-iOS-Source.zip"
-            echo "  ios_source.tar.gz"
+            echo "Expected:"
+            echo "Cinema66-iOS-Source.zip"
+
             exit 1
           fi
 
+          echo ""
           echo "Source archive:"
           echo "$ARCHIVE"
 
           echo "SOURCE_ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
 
       # ==========================================
-      # 5. فك ضغط المصدر
+      # 5. Extract source archive
       # ==========================================
       - name: Extract source archive
         shell: bash
         run: |
           set -e
 
-          rm -rf source_extracted
-          mkdir -p source_extracted
+          echo "=========================================="
+          echo "Extracting source"
+          echo "=========================================="
 
-          echo "Extracting:"
-          echo "$SOURCE_ARCHIVE"
+          rm -rf "$GITHUB_WORKSPACE/source_extracted"
+
+          mkdir -p "$GITHUB_WORKSPACE/source_extracted"
 
           case "$SOURCE_ARCHIVE" in
 
             *.zip)
-              unzip -q "$SOURCE_ARCHIVE" -d source_extracted
+
+              echo "Detected ZIP archive."
+
+              unzip -q \
+                "$SOURCE_ARCHIVE" \
+                -d "$GITHUB_WORKSPACE/source_extracted"
+
               ;;
 
-            *.tar.gz|*.tgz)
-              tar -xzf "$SOURCE_ARCHIVE" -C source_extracted
+            *.tar.gz)
+
+              echo "Detected TAR.GZ archive."
+
+              tar -xzf \
+                "$SOURCE_ARCHIVE" \
+                -C "$GITHUB_WORKSPACE/source_extracted"
+
+              ;;
+
+            *.tgz)
+
+              echo "Detected TGZ archive."
+
+              tar -xzf \
+                "$SOURCE_ARCHIVE" \
+                -C "$GITHUB_WORKSPACE/source_extracted"
+
               ;;
 
             *)
+
               echo "ERROR: Unsupported archive format."
               exit 1
+
               ;;
+
           esac
 
           echo ""
           echo "Extracted source:"
-          find source_extracted -maxdepth 5 \
+          
+          find "$GITHUB_WORKSPACE/source_extracted" \
+            -maxdepth 6 \
             -not -path "*/.git/*" \
-            -print | sort | head -n 500
+            -print \
+            | sort \
+            | head -n 500
 
       # ==========================================
-      # 6. تحديد مجلد المشروع الحقيقي
+      # 6. Locate Xcode project
       # ==========================================
       - name: Locate iOS project
         shell: bash
         run: |
           set -e
 
-          echo "=========================================="
-          echo "Searching for iOS project..."
-          echo "=========================================="
-
           ROOT="$GITHUB_WORKSPACE/source_extracted"
 
-          PROJECT_DIR=""
+          echo "=========================================="
+          echo "Searching for iOS project"
+          echo "=========================================="
 
           # --------------------------------------
-          # الأولوية 1: Xcode Workspace
+          # Workspace
           # --------------------------------------
-          WORKSPACE=$(find "$ROOT" \
-            -type d \
-            -name "*.xcworkspace" \
-            -not -path "*/Pods/*" \
-            -not -path "*/.git/*" \
-            | head -n 1 || true)
+
+          WORKSPACE=$(
+            find "$ROOT" \
+              -type d \
+              -name "*.xcworkspace" \
+              -not -path "*/Pods/*" \
+              -not -path "*/.git/*" \
+              | head -n 1 || true
+          )
 
           if [ -n "$WORKSPACE" ]; then
-            PROJECT_DIR="$(dirname "$WORKSPACE")"
 
             echo "Found workspace:"
             echo "$WORKSPACE"
 
-            echo "BUILD_WORKSPACE=$WORKSPACE" >> "$GITHUB_ENV"
-            echo "BUILD_PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+            PROJECT_DIR="$(dirname "$WORKSPACE")"
+
+            echo "BUILD_WORKSPACE=$WORKSPACE" \
+              >> "$GITHUB_ENV"
+
+            echo "BUILD_PROJECT_DIR=$PROJECT_DIR" \
+              >> "$GITHUB_ENV"
 
             exit 0
           fi
 
           # --------------------------------------
-          # الأولوية 2: Xcode Project
+          # Xcode Project
           # --------------------------------------
-          PROJECT=$(find "$ROOT" \
-            -type d \
-            -name "*.xcodeproj" \
-            -not -path "*/Pods/*" \
-            -not -path "*/.git/*" \
-            | head -n 1 || true)
+
+          PROJECT=$(
+            find "$ROOT" \
+              -type d \
+              -name "*.xcodeproj" \
+              -not -path "*/Pods/*" \
+              -not -path "*/.git/*" \
+              | head -n 1 || true
+          )
 
           if [ -n "$PROJECT" ]; then
-            PROJECT_DIR="$(dirname "$PROJECT")"
 
             echo "Found Xcode project:"
             echo "$PROJECT"
 
-            echo "BUILD_PROJECT=$PROJECT" >> "$GITHUB_ENV"
-            echo "BUILD_PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+            PROJECT_DIR="$(dirname "$PROJECT")"
+
+            echo "BUILD_PROJECT=$PROJECT" \
+              >> "$GITHUB_ENV"
+
+            echo "BUILD_PROJECT_DIR=$PROJECT_DIR" \
+              >> "$GITHUB_ENV"
 
             exit 0
           fi
 
           # --------------------------------------
-          # الأولوية 3: XcodeGen project.yml
+          # XcodeGen project.yml
           # --------------------------------------
-          PROJECT_YML=$(find "$ROOT" \
-            -type f \
-            -name "project.yml" \
-            -not -path "*/.git/*" \
-            | head -n 1 || true)
+
+          PROJECT_YML=$(
+            find "$ROOT" \
+              -type f \
+              -name "project.yml" \
+              -not -path "*/.git/*" \
+              | head -n 1 || true
+          )
 
           if [ -n "$PROJECT_YML" ]; then
-            PROJECT_DIR="$(dirname "$PROJECT_YML")"
 
             echo "Found XcodeGen project:"
             echo "$PROJECT_YML"
 
-            echo "BUILD_PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-            echo "BUILD_PROJECT_YML=$PROJECT_YML" >> "$GITHUB_ENV"
+            PROJECT_DIR="$(dirname "$PROJECT_YML")"
+
+            echo "BUILD_PROJECT_DIR=$PROJECT_DIR" \
+              >> "$GITHUB_ENV"
+
+            echo "BUILD_PROJECT_YML=$PROJECT_YML" \
+              >> "$GITHUB_ENV"
 
             exit 0
           fi
 
           echo ""
-          echo "ERROR: No .xcworkspace, .xcodeproj or project.yml found."
+          echo "ERROR: No Xcode project found."
+
+          echo ""
+          echo "The archive must contain one of:"
+          echo "*.xcworkspace"
+          echo "*.xcodeproj"
+          echo "project.yml"
+
           exit 1
 
       # ==========================================
-      # 7. تثبيت XcodeGen إذا كان مطلوبًا
+      # 7. Install XcodeGen
       # ==========================================
       - name: Install XcodeGen
         if: env.BUILD_PROJECT_YML != ''
@@ -257,10 +350,11 @@ jobs:
 
           brew install xcodegen
 
+          echo ""
           xcodegen --version
 
       # ==========================================
-      # 8. إنشاء Xcode project من project.yml
+      # 8. Generate Xcode project
       # ==========================================
       - name: Generate Xcode project
         if: env.BUILD_PROJECT_YML != ''
@@ -269,88 +363,118 @@ jobs:
         run: |
           set -e
 
-          echo "Generating Xcode project..."
+          echo "=========================================="
+          echo "Generating Xcode project"
+          echo "=========================================="
 
           xcodegen generate
 
           echo ""
-          echo "Generated project files:"
-          find . -maxdepth 2 \
-            \( -name "*.xcodeproj" -o -name "*.xcworkspace" \) \
+          echo "Generated files:"
+
+          find . \
+            -maxdepth 3 \
+            \( \
+              -name "*.xcodeproj" \
+              -o \
+              -name "*.xcworkspace" \
+            \) \
             -print
 
-          # اكتشاف المشروع الناتج
-          PROJECT=$(find . \
-            -type d \
-            -name "*.xcodeproj" \
-            | head -n 1 || true)
+          PROJECT=$(
+            find . \
+              -type d \
+              -name "*.xcodeproj" \
+              | head -n 1 || true
+          )
 
           if [ -z "$PROJECT" ]; then
-            echo "ERROR: XcodeGen did not create an .xcodeproj"
+
+            echo "ERROR: XcodeGen did not create an Xcode project."
             exit 1
+
           fi
 
           PROJECT="$GITHUB_WORKSPACE/source_extracted/$PROJECT"
 
+          echo ""
           echo "Generated project:"
           echo "$PROJECT"
 
-          echo "BUILD_PROJECT=$PROJECT" >> "$GITHUB_ENV"
+          echo "BUILD_PROJECT=$PROJECT" \
+            >> "$GITHUB_ENV"
 
       # ==========================================
-      # 9. تثبيت CocoaPods إذا موجود
+      # 9. CocoaPods
       # ==========================================
       - name: Install CocoaPods dependencies
         shell: bash
         run: |
           set -e
 
-          PODFILE=$(find "$BUILD_PROJECT_DIR" \
-            -maxdepth 2 \
-            -name "Podfile" \
-            -type f \
-            | head -n 1 || true)
+          PODFILE=$(
+            find "$BUILD_PROJECT_DIR" \
+              -maxdepth 3 \
+              -name "Podfile" \
+              -type f \
+              | head -n 1 || true
+          )
 
           if [ -z "$PODFILE" ]; then
+
             echo "No Podfile found."
             echo "Skipping CocoaPods."
+
             exit 0
+
           fi
 
           echo "Podfile found:"
           echo "$PODFILE"
 
           if ! command -v pod >/dev/null 2>&1; then
+
             echo "Installing CocoaPods..."
+
             brew install cocoapods
+
           fi
 
+          echo ""
+          echo "CocoaPods version:"
           pod --version
 
           POD_DIR="$(dirname "$PODFILE")"
 
           cd "$POD_DIR"
 
+          echo ""
           echo "Installing Pods..."
 
           pod install --repo-update
 
-          # إذا تم إنشاء workspace جديد
-          WORKSPACE=$(find "$POD_DIR" \
-            -maxdepth 2 \
-            -type d \
-            -name "*.xcworkspace" \
-            | head -n 1 || true)
+          # إذا CocoaPods أنشأ Workspace
+          WORKSPACE=$(
+            find "$POD_DIR" \
+              -maxdepth 2 \
+              -type d \
+              -name "*.xcworkspace" \
+              | head -n 1 || true
+          )
 
           if [ -n "$WORKSPACE" ]; then
+
+            echo ""
             echo "Using CocoaPods workspace:"
             echo "$WORKSPACE"
 
-            echo "BUILD_WORKSPACE=$WORKSPACE" >> "$GITHUB_ENV"
+            echo "BUILD_WORKSPACE=$WORKSPACE" \
+              >> "$GITHUB_ENV"
+
           fi
 
       # ==========================================
-      # 10. عرض معلومات المشروع
+      # 10. Inspect project
       # ==========================================
       - name: Inspect Xcode project
         shell: bash
@@ -358,38 +482,44 @@ jobs:
           set -e
 
           echo "=========================================="
-          echo "Project information"
+          echo "Xcode project information"
           echo "=========================================="
 
-          if [ -n "${BUILD_WORKSPACE:-}" ] && [ -d "$BUILD_WORKSPACE" ]; then
+          if [ -n "${BUILD_WORKSPACE:-}" ] \
+            && [ -d "$BUILD_WORKSPACE" ]; then
 
             echo "Workspace:"
             echo "$BUILD_WORKSPACE"
 
             echo ""
-            echo "xcodebuild -list:"
+            echo "Available schemes:"
+
             xcodebuild \
               -workspace "$BUILD_WORKSPACE" \
               -list
 
-          elif [ -n "${BUILD_PROJECT:-}" ] && [ -d "$BUILD_PROJECT" ]; then
+          elif [ -n "${BUILD_PROJECT:-}" ] \
+            && [ -d "$BUILD_PROJECT" ]; then
 
             echo "Project:"
             echo "$BUILD_PROJECT"
 
             echo ""
-            echo "xcodebuild -list:"
+            echo "Available schemes:"
+
             xcodebuild \
               -project "$BUILD_PROJECT" \
               -list
 
           else
+
             echo "ERROR: No project or workspace available."
             exit 1
+
           fi
 
       # ==========================================
-      # 11. اختيار Scheme تلقائيًا
+      # 11. Detect scheme
       # ==========================================
       - name: Detect build scheme
         shell: bash
@@ -397,69 +527,95 @@ jobs:
           set -e
 
           echo "=========================================="
-          echo "Detecting scheme..."
+          echo "Detecting build scheme"
           echo "=========================================="
 
-          SCHEME=""
+          LIST=""
 
-          if [ -n "${BUILD_WORKSPACE:-}" ] && [ -d "$BUILD_WORKSPACE" ]; then
+          if [ -n "${BUILD_WORKSPACE:-}" ] \
+            && [ -d "$BUILD_WORKSPACE" ]; then
 
-            LIST=$(xcodebuild \
-              -workspace "$BUILD_WORKSPACE" \
-              -list 2>/dev/null || true)
+            LIST=$(
+              xcodebuild \
+                -workspace "$BUILD_WORKSPACE" \
+                -list 2>/dev/null || true
+            )
 
           else
 
-            LIST=$(xcodebuild \
-              -project "$BUILD_PROJECT" \
-              -list 2>/dev/null || true)
+            LIST=$(
+              xcodebuild \
+                -project "$BUILD_PROJECT" \
+                -list 2>/dev/null || true
+            )
 
           fi
 
           echo "$LIST"
 
-          # نفضل Cinema66 إذا موجود
-          if echo "$LIST" | grep -qE '^[[:space:]]*Cinema66[[:space:]]*$'; then
+          SCHEME=""
+
+          # Cinema66
+          if echo "$LIST" | \
+            grep -qE '^[[:space:]]*Cinema66[[:space:]]*$'; then
+
             SCHEME="Cinema66"
 
-          # ثم Cinema إذا موجود
-          elif echo "$LIST" | grep -qE '^[[:space:]]*Cinema[[:space:]]*$'; then
+          # Cinema
+          elif echo "$LIST" | \
+            grep -qE '^[[:space:]]*Cinema[[:space:]]*$'; then
+
             SCHEME="Cinema"
 
           else
-            # أخذ أول Scheme ظاهر بعد Schemes:
-            SCHEME=$(echo "$LIST" | \
+
+            SCHEME=$(
+              echo "$LIST" |
               awk '
-                /Schemes:/ {found=1; next}
+                /Schemes:/ {
+                  found=1
+                  next
+                }
+
                 found && NF {
                   gsub(/^[ \t]+|[ \t]+$/, "", $0)
                   print
                   exit
                 }
-              ')
+              '
+            )
+
           fi
 
           if [ -z "$SCHEME" ]; then
-            echo "ERROR: Could not detect a build scheme."
+
+            echo ""
+            echo "ERROR: Could not detect build scheme."
+
             echo ""
             echo "Available schemes:"
             echo "$LIST"
+
             exit 1
+
           fi
 
           echo ""
           echo "Selected scheme:"
           echo "$SCHEME"
 
-          echo "BUILD_SCHEME=$SCHEME" >> "$GITHUB_ENV"
+          echo "BUILD_SCHEME=$SCHEME" \
+            >> "$GITHUB_ENV"
 
       # ==========================================
-      # 12. تنظيف مجلد البناء
+      # 12. Prepare build directories
       # ==========================================
       - name: Prepare build directory
         shell: bash
         run: |
           set -e
+
+          echo "Preparing build directories..."
 
           rm -rf "$GITHUB_WORKSPACE/build_output"
           rm -rf "$GITHUB_WORKSPACE/ipa_output"
@@ -467,10 +623,10 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/build_output"
           mkdir -p "$GITHUB_WORKSPACE/ipa_output"
 
-          echo "Build directories prepared."
+          echo "Done."
 
       # ==========================================
-      # 13. Build unsigned iOS app
+      # 13. BUILD
       # ==========================================
       - name: Build unsigned iOS app
         shell: bash
@@ -481,11 +637,12 @@ jobs:
           echo "BUILDING CINEMA 66"
           echo "=========================================="
 
+          echo ""
           echo "Xcode:"
           xcodebuild -version
 
           echo ""
-          echo "SDK:"
+          echo "iOS SDK:"
           xcrun --sdk iphoneos --show-sdk-version
 
           echo ""
@@ -493,25 +650,58 @@ jobs:
           echo "$BUILD_SCHEME"
 
           echo ""
+          echo "Destination:"
+          echo "generic/platform=iOS"
+
+          echo ""
+
+          # --------------------------------------
+          # Build arguments
+          # --------------------------------------
 
           COMMON_ARGS=(
-            "-configuration" "Release"
-            "-sdk" "iphoneos"
-            "-derivedDataPath" "$GITHUB_WORKSPACE/build_output"
+
+            "-configuration"
+            "Release"
+
+            "-sdk"
+            "iphoneos"
+
+            # الحل الأساسي لمشكلة:
+            # Found no destinations
+            "-destination"
+            "generic/platform=iOS"
+
+            "-derivedDataPath"
+            "$GITHUB_WORKSPACE/build_output"
 
             "CODE_SIGNING_ALLOWED=NO"
+
             "CODE_SIGNING_REQUIRED=NO"
+
             "CODE_SIGN_IDENTITY="
+
             "CODE_SIGNING_INJECT_BASE_ENTITLEMENTS=NO"
+
             "PROVISIONING_PROFILE_SPECIFIER="
+
             "DEVELOPMENT_TEAM="
 
             "ONLY_ACTIVE_ARCH=NO"
+
           )
 
-          if [ -n "${BUILD_WORKSPACE:-}" ] && [ -d "$BUILD_WORKSPACE" ]; then
+          # --------------------------------------
+          # Build Workspace
+          # --------------------------------------
 
-            echo "Building workspace:"
+          if [ -n "${BUILD_WORKSPACE:-}" ] \
+            && [ -d "$BUILD_WORKSPACE" ]; then
+
+            echo "=========================================="
+            echo "Building Workspace"
+            echo "=========================================="
+
             echo "$BUILD_WORKSPACE"
 
             xcodebuild \
@@ -520,9 +710,17 @@ jobs:
               "${COMMON_ARGS[@]}" \
               build
 
-          else
+          # --------------------------------------
+          # Build Project
+          # --------------------------------------
 
-            echo "Building project:"
+          elif [ -n "${BUILD_PROJECT:-}" ] \
+            && [ -d "$BUILD_PROJECT" ]; then
+
+            echo "=========================================="
+            echo "Building Xcode Project"
+            echo "=========================================="
+
             echo "$BUILD_PROJECT"
 
             xcodebuild \
@@ -531,10 +729,20 @@ jobs:
               "${COMMON_ARGS[@]}" \
               build
 
+          else
+
+            echo "ERROR: No Xcode project or workspace found."
+            exit 1
+
           fi
 
+          echo ""
+          echo "=========================================="
+          echo "BUILD FINISHED SUCCESSFULLY"
+          echo "=========================================="
+
       # ==========================================
-      # 14. البحث عن .app
+      # 14. Find .app
       # ==========================================
       - name: Locate built app
         shell: bash
@@ -542,52 +750,70 @@ jobs:
           set -e
 
           echo "=========================================="
-          echo "Searching for built .app"
+          echo "Searching for .app"
           echo "=========================================="
 
-          APP_PATH=$(find "$GITHUB_WORKSPACE/build_output" \
-            -type d \
-            -path "*/Build/Products/Release-iphoneos/*.app" \
-            | head -n 1 || true)
+          APP_PATH=$(
+            find "$GITHUB_WORKSPACE/build_output" \
+              -type d \
+              -path "*/Build/Products/Release-iphoneos/*.app" \
+              | head -n 1 || true
+          )
 
           if [ -z "$APP_PATH" ]; then
-            APP_PATH=$(find "$GITHUB_WORKSPACE/build_output" \
-              -type d \
-              -name "*.app" \
-              | head -n 1 || true)
+
+            APP_PATH=$(
+              find "$GITHUB_WORKSPACE/build_output" \
+                -type d \
+                -name "*.app" \
+                | head -n 1 || true
+            )
+
           fi
 
           if [ -z "$APP_PATH" ]; then
+
             echo "ERROR: No .app was produced."
+
             echo ""
             echo "Build output:"
+
             find "$GITHUB_WORKSPACE/build_output" \
-              -maxdepth 6 \
-              -print | sort
+              -maxdepth 8 \
+              -print \
+              | sort
+
             exit 1
+
           fi
 
+          echo ""
           echo "Built app:"
           echo "$APP_PATH"
 
           echo ""
           echo "App information:"
+
           /usr/libexec/PlistBuddy \
             -c "Print :CFBundleDisplayName" \
-            "$APP_PATH/Info.plist" 2>/dev/null || true
+            "$APP_PATH/Info.plist" \
+            2>/dev/null || true
 
           /usr/libexec/PlistBuddy \
             -c "Print :CFBundleIdentifier" \
-            "$APP_PATH/Info.plist" 2>/dev/null || true
+            "$APP_PATH/Info.plist" \
+            2>/dev/null || true
 
           /usr/libexec/PlistBuddy \
             -c "Print :CFBundleShortVersionString" \
-            "$APP_PATH/Info.plist" 2>/dev/null || true
+            "$APP_PATH/Info.plist" \
+            2>/dev/null || true
 
-          echo "APP_PATH=$APP_PATH" >> "$GITHUB_ENV"
+          echo "APP_PATH=$APP_PATH" \
+            >> "$GITHUB_ENV"
 
       # ==========================================
-      # 15. إنشاء IPA
+      # 15. Package IPA
       # ==========================================
       - name: Package IPA
         shell: bash
@@ -595,26 +821,31 @@ jobs:
           set -e
 
           echo "=========================================="
-          echo "Creating IPA"
+          echo "Creating Cinema66.ipa"
           echo "=========================================="
 
           rm -rf "$GITHUB_WORKSPACE/ipa_output/Payload"
 
-          mkdir -p "$GITHUB_WORKSPACE/ipa_output/Payload"
+          mkdir -p \
+            "$GITHUB_WORKSPACE/ipa_output/Payload"
 
+          echo ""
           echo "Copying app..."
 
-          cp -R "$APP_PATH" \
+          cp -R \
+            "$APP_PATH" \
             "$GITHUB_WORKSPACE/ipa_output/Payload/"
 
           echo ""
-          echo "Payload:"
-          ls -lah "$GITHUB_WORKSPACE/ipa_output/Payload"
+          echo "Payload contents:"
+
+          ls -lah \
+            "$GITHUB_WORKSPACE/ipa_output/Payload"
 
           cd "$GITHUB_WORKSPACE/ipa_output"
 
           echo ""
-          echo "Creating Cinema66.ipa..."
+          echo "Creating IPA..."
 
           /usr/bin/zip \
             -qry \
@@ -622,15 +853,19 @@ jobs:
             "Payload"
 
           echo ""
-          echo "IPA created:"
+          echo "=========================================="
+          echo "IPA CREATED"
+          echo "=========================================="
+
           ls -lh "Cinema66.ipa"
 
           echo ""
           echo "IPA size:"
+
           du -h "Cinema66.ipa"
 
       # ==========================================
-      # 16. فحص IPA
+      # 16. Verify IPA
       # ==========================================
       - name: Verify IPA
         shell: bash
@@ -639,37 +874,45 @@ jobs:
 
           IPA="$GITHUB_WORKSPACE/ipa_output/Cinema66.ipa"
 
+          echo "=========================================="
+          echo "Verifying IPA"
+          echo "=========================================="
+
           if [ ! -f "$IPA" ]; then
-            echo "ERROR: Cinema66.ipa was not created."
+
+            echo "ERROR: Cinema66.ipa does not exist."
             exit 1
+
           fi
 
-          echo "IPA exists:"
+          echo ""
+          echo "IPA:"
           ls -lh "$IPA"
 
           echo ""
           echo "IPA contents:"
-          unzip -l "$IPA" | head -n 50
+
+          unzip -l "$IPA" \
+            | head -n 100
 
           echo ""
           echo "IPA verification completed."
 
       # ==========================================
-      # 17. رفع IPA كـ Artifact
+      # 17. Upload IPA
       # ==========================================
       - name: Upload Cinema 66 IPA
         uses: actions/upload-artifact@v4
         with:
           name: Cinema66-IPA
-          path: |
-            ipa_output/Cinema66.ipa
+          path: ipa_output/Cinema66.ipa
           if-no-files-found: error
           retention-days: 30
 
       # ==========================================
-      # 18. رفع معلومات البناء عند الفشل
+      # 18. Upload diagnostics if failed
       # ==========================================
-      - name: Upload build logs
+      - name: Upload build diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
         with:
