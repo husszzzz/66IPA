@@ -2,12 +2,14 @@ name: Build Unsigned Median IPA
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches:
+      - main
+      - master
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: macos-26
 
     steps:
       - name: Checkout Repository
@@ -15,35 +17,148 @@ jobs:
 
       - name: Extract Source Code
         run: |
-          tar -xzf ios_source.tar.gz
+          mkdir -p ios_source
+          tar -xzf ios_source.tar.gz -C ios_source
+
+      - name: Find Xcode Project
+        shell: bash
+        run: |
+          echo "Searching for Xcode project..."
+
+          find ios_source \
+            \( -name "*.xcworkspace" -o -name "*.xcodeproj" -o -name "Podfile" \) \
+            -print
 
       - name: Install Dependencies
+        shell: bash
         run: |
-          cd $(dirname $(find . -name "Podfile" | head -1))
-          pod install --repo-update
+          set -e
+
+          PROJECT_DIR=$(find ios_source -type f \
+            \( -name "*.xcworkspace" -o -name "*.xcodeproj" \) \
+            -print -quit | xargs dirname)
+
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "ERROR: No .xcodeproj or .xcworkspace found."
+            exit 1
+          fi
+
+          echo "Project directory:"
+          echo "$PROJECT_DIR"
+
+          if find "$PROJECT_DIR" -maxdepth 1 -name "Podfile" -print -quit | grep -q .; then
+            echo "Podfile found. Installing CocoaPods dependencies..."
+            cd "$PROJECT_DIR"
+            pod install --repo-update
+          else
+            echo "No Podfile found."
+            echo "Skipping CocoaPods because this project does not use CocoaPods."
+          fi
 
       - name: Build App (Unsigned)
+        shell: bash
         run: |
-          cd $(dirname $(find . -name "*.xcworkspace" | head -1))
-          WORKSPACE=$(ls | grep .xcworkspace | head -1)
-          SCHEME=$(xcodebuild -workspace "$WORKSPACE" -list | awk '/Schemes:/{getline; print $1}')
-          
-          xcodebuild clean build \
-            -workspace "$WORKSPACE" \
-            -scheme "$SCHEME" \
-            -configuration Release \
-            -sdk iphoneos \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            CONFIGURATION_BUILD_DIR="$(pwd)/build_output"
+          set -e
+
+          PROJECT_DIR=$(find ios_source -type f \
+            \( -name "*.xcworkspace" -o -name "*.xcodeproj" \) \
+            -print -quit | xargs dirname)
+
+          cd "$PROJECT_DIR"
+
+          WORKSPACE=$(find . -maxdepth 1 -name "*.xcworkspace" -print -quit)
+          PROJECT=$(find . -maxdepth 1 -name "*.xcodeproj" -print -quit)
+
+          mkdir -p build_output
+
+          if [ -n "$WORKSPACE" ]; then
+
+            echo "Using workspace:"
+            echo "$WORKSPACE"
+
+            SCHEME=$(xcodebuild \
+              -workspace "$WORKSPACE" \
+              -list |
+              awk '/Schemes:/{getline; print $1; exit}')
+
+            if [ -z "$SCHEME" ]; then
+              echo "ERROR: Could not find Xcode scheme."
+              xcodebuild -workspace "$WORKSPACE" -list
+              exit 1
+            fi
+
+            echo "Scheme:"
+            echo "$SCHEME"
+
+            xcodebuild clean build \
+              -workspace "$WORKSPACE" \
+              -scheme "$SCHEME" \
+              -configuration Release \
+              -sdk iphoneos \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGNING_ALLOWED=NO \
+              CONFIGURATION_BUILD_DIR="$PWD/build_output"
+
+          elif [ -n "$PROJECT" ]; then
+
+            echo "Using project:"
+            echo "$PROJECT"
+
+            SCHEME=$(xcodebuild \
+              -project "$PROJECT" \
+              -list |
+              awk '/Schemes:/{getline; print $1; exit}')
+
+            if [ -z "$SCHEME" ]; then
+              echo "ERROR: Could not find Xcode scheme."
+              xcodebuild -project "$PROJECT" -list
+              exit 1
+            fi
+
+            echo "Scheme:"
+            echo "$SCHEME"
+
+            xcodebuild clean build \
+              -project "$PROJECT" \
+              -scheme "$SCHEME" \
+              -configuration Release \
+              -sdk iphoneos \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGNING_ALLOWED=NO \
+              CONFIGURATION_BUILD_DIR="$PWD/build_output"
+
+          else
+            echo "ERROR: No Xcode project or workspace found."
+            exit 1
+          fi
 
       - name: Create IPA File
+        shell: bash
         run: |
-          cd $(dirname $(find . -name "*.xcworkspace" | head -1))
+          set -e
+
+          PROJECT_DIR=$(find ios_source -type f \
+            \( -name "*.xcworkspace" -o -name "*.xcodeproj" \) \
+            -print -quit | xargs dirname)
+
+          cd "$PROJECT_DIR"
+
+          APP_PATH=$(find build_output -maxdepth 1 -name "*.app" -print -quit)
+
+          if [ -z "$APP_PATH" ]; then
+            echo "ERROR: No .app was produced."
+            exit 1
+          fi
+
           mkdir -p Payload
-          mv build_output/*.app Payload/
-          zip -qr ../hassany_app.ipa Payload
+          cp -R "$APP_PATH" Payload/
+
+          zip -qr "$GITHUB_WORKSPACE/hassany_app.ipa" Payload
+
+          echo "IPA created:"
+          ls -lh "$GITHUB_WORKSPACE/hassany_app.ipa"
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
