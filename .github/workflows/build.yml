@@ -19,7 +19,7 @@ jobs:
     steps:
 
       # ==========================================
-      # 1. Checkout repository
+      # 1. Checkout
       # ==========================================
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -41,7 +41,7 @@ jobs:
           if [ ! -d "$XCODE_APP" ]; then
             echo "ERROR: Xcode 26.6 not found."
             echo ""
-            echo "Available Xcode installations:"
+            echo "Available Xcode versions:"
             ls -d /Applications/Xcode*.app 2>/dev/null || true
             exit 1
           fi
@@ -50,67 +50,49 @@ jobs:
             "$XCODE_APP/Contents/Developer"
 
           echo ""
-          echo "Selected Xcode:"
+          echo "Xcode:"
           xcodebuild -version
 
           echo ""
-          echo "Selected developer directory:"
+          echo "Developer directory:"
           xcode-select -p
 
       # ==========================================
-      # 3. Check installed SDKs and platforms
+      # 3. Verify iOS 26.5 SDK
       # ==========================================
-      - name: Check iOS platform
+      - name: Verify iOS 26.5 SDK
         shell: bash
         run: |
           set -e
 
           echo "=========================================="
-          echo "Checking iOS platform"
+          echo "Checking iOS SDK"
           echo "=========================================="
 
           echo ""
-          echo "Xcode SDKs:"
+          echo "Available SDKs:"
           xcodebuild -showsdks
 
           echo ""
-          echo "iOS SDK:"
-          xcrun --sdk iphoneos --show-sdk-version || true
+          echo "Current iPhoneOS SDK:"
 
-          echo ""
-          echo "Available iOS runtimes/platforms:"
-          xcodebuild -downloadPlatform iOS -help 2>/dev/null || true
+          SDK_VERSION=$(
+            xcrun --sdk iphoneos --show-sdk-version
+          )
 
-      # ==========================================
-      # 4. Install iOS 26 platform
-      # ==========================================
-      - name: Install iOS 26 platform
-        shell: bash
-        run: |
-          set -e
+          echo "$SDK_VERSION"
 
-          echo "=========================================="
-          echo "Installing iOS 26 platform"
-          echo "=========================================="
-
-          echo ""
-          echo "Downloading iOS platform if required..."
-
-          xcodebuild \
-            -downloadPlatform iOS \
-            -buildVersion 26.0
-
-          echo ""
-          echo "Checking iOS platform after installation..."
-
-          xcodebuild -showsdks | grep -i "iphoneos" || true
-
-          echo ""
-          echo "iOS SDK:"
-          xcrun --sdk iphoneos --show-sdk-version
+          if [ "$SDK_VERSION" != "26.5" ]; then
+            echo ""
+            echo "WARNING:"
+            echo "Expected iOS SDK 26.5."
+            echo "Found: $SDK_VERSION"
+            echo ""
+            echo "Continuing with the installed iOS SDK."
+          fi
 
       # ==========================================
-      # 5. Inspect repository
+      # 4. Repository inspection
       # ==========================================
       - name: Inspect repository
         shell: bash
@@ -126,7 +108,7 @@ jobs:
             | sort
 
       # ==========================================
-      # 6. Locate source archive
+      # 5. Locate source archive
       # ==========================================
       - name: Locate source archive
         shell: bash
@@ -136,15 +118,12 @@ jobs:
           ARCHIVE=""
 
           if [ -f "Cinema66-iOS-Source.zip" ]; then
-
             ARCHIVE="Cinema66-iOS-Source.zip"
 
           elif [ -f "ios_source.tar.gz" ]; then
-
             ARCHIVE="ios_source.tar.gz"
 
           else
-
             ARCHIVE=$(
               find . \
                 -maxdepth 2 \
@@ -159,7 +138,6 @@ jobs:
                 -not -path "./.git/*" \
                 | head -n 1
             )
-
           fi
 
           if [ -z "$ARCHIVE" ]; then
@@ -174,7 +152,7 @@ jobs:
           echo "SOURCE_ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
 
       # ==========================================
-      # 7. Extract source archive
+      # 6. Extract source
       # ==========================================
       - name: Extract source archive
         shell: bash
@@ -192,46 +170,37 @@ jobs:
           case "$SOURCE_ARCHIVE" in
 
             *.zip)
-
               echo "ZIP detected."
 
               unzip -q \
                 "$SOURCE_ARCHIVE" \
                 -d "$GITHUB_WORKSPACE/source_extracted"
-
               ;;
 
             *.tar.gz)
-
               echo "TAR.GZ detected."
 
               tar -xzf \
                 "$SOURCE_ARCHIVE" \
                 -C "$GITHUB_WORKSPACE/source_extracted"
-
               ;;
 
             *.tgz)
-
               echo "TGZ detected."
 
               tar -xzf \
                 "$SOURCE_ARCHIVE" \
                 -C "$GITHUB_WORKSPACE/source_extracted"
-
               ;;
 
             *)
-
               echo "ERROR: Unsupported archive format."
               exit 1
-
               ;;
-
           esac
 
           echo ""
-          echo "Extracted source:"
+          echo "Extracted files:"
 
           find "$GITHUB_WORKSPACE/source_extracted" \
             -maxdepth 7 \
@@ -241,7 +210,7 @@ jobs:
             | head -n 500
 
       # ==========================================
-      # 8. Locate iOS project
+      # 7. Locate Xcode project
       # ==========================================
       - name: Locate iOS project
         shell: bash
@@ -255,7 +224,7 @@ jobs:
           echo "=========================================="
 
           # --------------------------------------
-          # Workspace first
+          # Workspace
           # --------------------------------------
 
           WORKSPACE=$(
@@ -284,7 +253,7 @@ jobs:
           fi
 
           # --------------------------------------
-          # Xcode project
+          # Xcode Project
           # --------------------------------------
 
           PROJECT=$(
@@ -351,7 +320,7 @@ jobs:
           exit 1
 
       # ==========================================
-      # 9. Install XcodeGen
+      # 8. Install XcodeGen if needed
       # ==========================================
       - name: Install XcodeGen
         if: env.BUILD_PROJECT_YML != ''
@@ -367,7 +336,7 @@ jobs:
           xcodegen --version
 
       # ==========================================
-      # 10. Generate Xcode project
+      # 9. Generate Xcode project
       # ==========================================
       - name: Generate Xcode project
         if: env.BUILD_PROJECT_YML != ''
@@ -381,18 +350,6 @@ jobs:
           echo "=========================================="
 
           xcodegen generate
-
-          echo ""
-          echo "Generated projects:"
-
-          find . \
-            -maxdepth 4 \
-            \( \
-              -name "*.xcodeproj" \
-              -o \
-              -name "*.xcworkspace" \
-            \) \
-            -print
 
           PROJECT=$(
             find . \
@@ -416,7 +373,7 @@ jobs:
             >> "$GITHUB_ENV"
 
       # ==========================================
-      # 11. CocoaPods
+      # 10. CocoaPods
       # ==========================================
       - name: Install CocoaPods dependencies
         shell: bash
@@ -432,27 +389,21 @@ jobs:
           )
 
           if [ -z "$PODFILE" ]; then
-
             echo "No Podfile found."
             echo "Skipping CocoaPods."
-
             exit 0
-
           fi
 
           echo "Podfile:"
           echo "$PODFILE"
 
           if ! command -v pod >/dev/null 2>&1; then
-
             echo "Installing CocoaPods..."
-
             brew install cocoapods
-
           fi
 
           echo ""
-          echo "CocoaPods:"
+          echo "CocoaPods version:"
           pod --version
 
           POD_DIR="$(dirname "$PODFILE")"
@@ -460,7 +411,7 @@ jobs:
           cd "$POD_DIR"
 
           echo ""
-          echo "Installing dependencies..."
+          echo "Installing Pods..."
 
           pod install --repo-update
 
@@ -473,18 +424,16 @@ jobs:
           )
 
           if [ -n "$WORKSPACE" ]; then
-
             echo ""
-            echo "CocoaPods workspace:"
+            echo "Using CocoaPods workspace:"
             echo "$WORKSPACE"
 
             echo "BUILD_WORKSPACE=$WORKSPACE" \
               >> "$GITHUB_ENV"
-
           fi
 
       # ==========================================
-      # 12. Inspect project
+      # 11. Inspect project
       # ==========================================
       - name: Inspect Xcode project
         shell: bash
@@ -525,7 +474,7 @@ jobs:
           fi
 
       # ==========================================
-      # 13. Detect scheme
+      # 12. Detect scheme
       # ==========================================
       - name: Detect build scheme
         shell: bash
@@ -593,11 +542,7 @@ jobs:
 
           if [ -z "$SCHEME" ]; then
 
-            echo ""
             echo "ERROR: Could not detect scheme."
-
-            echo "$LIST"
-
             exit 1
 
           fi
@@ -610,24 +555,16 @@ jobs:
             >> "$GITHUB_ENV"
 
       # ==========================================
-      # 14. Check destination BEFORE build
+      # 13. Show destinations
       # ==========================================
-      - name: Verify iOS build destination
+      - name: Show available destinations
         shell: bash
         run: |
           set -e
 
           echo "=========================================="
-          echo "Checking iOS destination"
+          echo "Available destinations"
           echo "=========================================="
-
-          DESTINATION="generic/platform=iOS"
-
-          echo "Destination:"
-          echo "$DESTINATION"
-
-          echo ""
-          echo "Checking project destinations..."
 
           if [ -n "${BUILD_WORKSPACE:-}" ] \
             && [ -d "$BUILD_WORKSPACE" ]; then
@@ -635,23 +572,21 @@ jobs:
             xcodebuild \
               -workspace "$BUILD_WORKSPACE" \
               -scheme "$BUILD_SCHEME" \
-              -showdestinations \
-              || true
+              -showdestinations || true
 
           else
 
             xcodebuild \
               -project "$BUILD_PROJECT" \
               -scheme "$BUILD_SCHEME" \
-              -showdestinations \
-              || true
+              -showdestinations || true
 
           fi
 
       # ==========================================
-      # 15. Prepare build directory
+      # 14. Prepare build directories
       # ==========================================
-      - name: Prepare build directory
+      - name: Prepare build directories
         shell: bash
         run: |
           set -e
@@ -662,10 +597,8 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/build_output"
           mkdir -p "$GITHUB_WORKSPACE/ipa_output"
 
-          echo "Build directories ready."
-
       # ==========================================
-      # 16. Build unsigned iOS app
+      # 15. Build unsigned iOS app
       # ==========================================
       - name: Build unsigned iOS app
         shell: bash
@@ -760,7 +693,7 @@ jobs:
           echo "=========================================="
 
       # ==========================================
-      # 17. Locate .app
+      # 16. Locate .app
       # ==========================================
       - name: Locate built app
         shell: bash
@@ -768,7 +701,7 @@ jobs:
           set -e
 
           echo "=========================================="
-          echo "Locating .app"
+          echo "Locating built .app"
           echo "=========================================="
 
           APP_PATH=$(
@@ -791,7 +724,7 @@ jobs:
 
           if [ -z "$APP_PATH" ]; then
 
-            echo "ERROR: No .app found."
+            echo "ERROR: No .app was produced."
 
             echo ""
             echo "Build output:"
@@ -802,25 +735,30 @@ jobs:
               | sort
 
             exit 1
-
           fi
 
           echo ""
-          echo "APP:"
+          echo "Built app:"
           echo "$APP_PATH"
 
           echo ""
-          echo "Bundle information:"
+          echo "Bundle ID:"
+
+          /usr/libexec/PlistBuddy \
+            -c "Print :CFBundleIdentifier" \
+            "$APP_PATH/Info.plist" \
+            2>/dev/null || true
+
+          echo ""
+          echo "Display Name:"
 
           /usr/libexec/PlistBuddy \
             -c "Print :CFBundleDisplayName" \
             "$APP_PATH/Info.plist" \
             2>/dev/null || true
 
-          /usr/libexec/PlistBuddy \
-            -c "Print :CFBundleIdentifier" \
-            "$APP_PATH/Info.plist" \
-            2>/dev/null || true
+          echo ""
+          echo "Version:"
 
           /usr/libexec/PlistBuddy \
             -c "Print :CFBundleShortVersionString" \
@@ -831,7 +769,7 @@ jobs:
             >> "$GITHUB_ENV"
 
       # ==========================================
-      # 18. Package IPA
+      # 17. Create IPA
       # ==========================================
       - name: Package IPA
         shell: bash
@@ -860,14 +798,11 @@ jobs:
             "Payload"
 
           echo ""
-          echo "=========================================="
-          echo "IPA CREATED"
-          echo "=========================================="
-
-          ls -lh "Cinema66.ipa"
+          echo "IPA created:"
+          ls -lh Cinema66.ipa
 
       # ==========================================
-      # 19. Verify IPA
+      # 18. Verify IPA
       # ==========================================
       - name: Verify IPA
         shell: bash
@@ -881,7 +816,10 @@ jobs:
             exit 1
           fi
 
-          echo "IPA:"
+          echo "=========================================="
+          echo "IPA verification"
+          echo "=========================================="
+
           ls -lh "$IPA"
 
           echo ""
@@ -893,7 +831,7 @@ jobs:
           echo "IPA verification successful."
 
       # ==========================================
-      # 20. Upload IPA
+      # 19. Upload IPA
       # ==========================================
       - name: Upload Cinema 66 IPA
         uses: actions/upload-artifact@v4
@@ -904,7 +842,7 @@ jobs:
           retention-days: 30
 
       # ==========================================
-      # 21. Upload diagnostics if build fails
+      # 20. Upload diagnostics on failure
       # ==========================================
       - name: Upload build diagnostics
         if: failure()
