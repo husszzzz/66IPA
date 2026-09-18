@@ -5,6 +5,7 @@ on:
   push:
     paths:
       - "Cinema66-iOS-Source.zip"
+      - "Cinema 66.ipa"
       - "ios_source.tar.gz"
       - ".github/workflows/build.yml"
 
@@ -18,23 +19,22 @@ jobs:
 
     steps:
 
-      # ==========================================
-      # 1. Checkout
-      # ==========================================
+      # =========================================================
+      # CHECKOUT
+      # =========================================================
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ==========================================
-      # 2. Select Xcode 26.6
-      # ==========================================
+
+      # =========================================================
+      # XCODE 26.6
+      # =========================================================
+
       - name: Select Xcode 26.6
         shell: bash
         run: |
           set -e
-
-          echo "=========================================="
-          echo "Selecting Xcode 26.6"
-          echo "=========================================="
 
           XCODE_APP="/Applications/Xcode_26.6.app"
 
@@ -50,27 +50,30 @@ jobs:
             "$XCODE_APP/Contents/Developer"
 
           echo ""
-          echo "Xcode:"
+          echo "=========================================="
+          echo "XCODE VERSION"
+          echo "=========================================="
+
           xcodebuild -version
 
           echo ""
           echo "Developer directory:"
           xcode-select -p
 
-      # ==========================================
-      # 3. Verify iOS 26.5 SDK
-      # ==========================================
-      - name: Verify iOS 26.5 SDK
+
+      # =========================================================
+      # IOS SDK
+      # =========================================================
+
+      - name: Verify iOS SDK
         shell: bash
         run: |
           set -e
 
           echo "=========================================="
-          echo "Checking iOS SDK"
+          echo "IOS SDK"
           echo "=========================================="
 
-          echo ""
-          echo "Available SDKs:"
           xcodebuild -showsdks
 
           echo ""
@@ -88,17 +91,19 @@ jobs:
             echo "Expected iOS SDK 26.5."
             echo "Found: $SDK_VERSION"
             echo ""
-            echo "Continuing with the installed iOS SDK."
+            echo "Continuing with installed SDK."
           fi
 
-      # ==========================================
-      # 4. Repository inspection
-      # ==========================================
+
+      # =========================================================
+      # INSPECT REPOSITORY
+      # =========================================================
+
       - name: Inspect repository
         shell: bash
         run: |
           echo "=========================================="
-          echo "Repository contents"
+          echo "REPOSITORY CONTENTS"
           echo "=========================================="
 
           find . \
@@ -107,9 +112,11 @@ jobs:
             -print \
             | sort
 
-      # ==========================================
-      # 5. Locate source archive
-      # ==========================================
+
+      # =========================================================
+      # LOCATE SOURCE ARCHIVE
+      # =========================================================
+
       - name: Locate source archive
         shell: bash
         run: |
@@ -118,12 +125,15 @@ jobs:
           ARCHIVE=""
 
           if [ -f "Cinema66-iOS-Source.zip" ]; then
+
             ARCHIVE="Cinema66-iOS-Source.zip"
 
           elif [ -f "ios_source.tar.gz" ]; then
+
             ARCHIVE="ios_source.tar.gz"
 
           else
+
             ARCHIVE=$(
               find . \
                 -maxdepth 2 \
@@ -138,6 +148,7 @@ jobs:
                 -not -path "./.git/*" \
                 | head -n 1
             )
+
           fi
 
           if [ -z "$ARCHIVE" ]; then
@@ -151,52 +162,65 @@ jobs:
 
           echo "SOURCE_ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
 
-      # ==========================================
-      # 6. Extract source
-      # ==========================================
+
+      # =========================================================
+      # EXTRACT SOURCE
+      # =========================================================
+
       - name: Extract source archive
         shell: bash
         run: |
           set -e
 
           echo "=========================================="
-          echo "Extracting source archive"
+          echo "EXTRACTING SOURCE"
           echo "=========================================="
 
-          rm -rf "$GITHUB_WORKSPACE/source_extracted"
+          rm -rf \
+            "$GITHUB_WORKSPACE/source_extracted"
 
-          mkdir -p "$GITHUB_WORKSPACE/source_extracted"
+          mkdir -p \
+            "$GITHUB_WORKSPACE/source_extracted"
 
           case "$SOURCE_ARCHIVE" in
 
             *.zip)
+
               echo "ZIP detected."
 
               unzip -q \
                 "$SOURCE_ARCHIVE" \
                 -d "$GITHUB_WORKSPACE/source_extracted"
+
               ;;
 
             *.tar.gz)
+
               echo "TAR.GZ detected."
 
               tar -xzf \
                 "$SOURCE_ARCHIVE" \
                 -C "$GITHUB_WORKSPACE/source_extracted"
+
               ;;
 
             *.tgz)
+
               echo "TGZ detected."
 
               tar -xzf \
                 "$SOURCE_ARCHIVE" \
                 -C "$GITHUB_WORKSPACE/source_extracted"
+
               ;;
 
             *)
+
               echo "ERROR: Unsupported archive format."
               exit 1
+
               ;;
+
           esac
 
           echo ""
@@ -209,9 +233,11 @@ jobs:
             | sort \
             | head -n 500
 
-      # ==========================================
-      # 7. Locate Xcode project
-      # ==========================================
+
+      # =========================================================
+      # LOCATE IOS PROJECT
+      # =========================================================
+
       - name: Locate iOS project
         shell: bash
         run: |
@@ -220,12 +246,8 @@ jobs:
           ROOT="$GITHUB_WORKSPACE/source_extracted"
 
           echo "=========================================="
-          echo "Searching for iOS project"
+          echo "SEARCHING FOR IOS PROJECT"
           echo "=========================================="
-
-          # --------------------------------------
-          # Workspace
-          # --------------------------------------
 
           WORKSPACE=$(
             find "$ROOT" \
@@ -250,11 +272,9 @@ jobs:
               >> "$GITHUB_ENV"
 
             exit 0
+
           fi
 
-          # --------------------------------------
-          # Xcode Project
-          # --------------------------------------
 
           PROJECT=$(
             find "$ROOT" \
@@ -279,11 +299,9 @@ jobs:
               >> "$GITHUB_ENV"
 
             exit 0
+
           fi
 
-          # --------------------------------------
-          # XcodeGen project.yml
-          # --------------------------------------
 
           PROJECT_YML=$(
             find "$ROOT" \
@@ -307,7 +325,9 @@ jobs:
               >> "$GITHUB_ENV"
 
             exit 0
+
           fi
+
 
           echo ""
           echo "ERROR: No iOS project found."
@@ -319,9 +339,11 @@ jobs:
 
           exit 1
 
-      # ==========================================
-      # 8. Install XcodeGen if needed
-      # ==========================================
+
+      # =========================================================
+      # XCODEGEN
+      # =========================================================
+
       - name: Install XcodeGen
         if: env.BUILD_PROJECT_YML != ''
         shell: bash
@@ -335,9 +357,11 @@ jobs:
           echo ""
           xcodegen --version
 
-      # ==========================================
-      # 9. Generate Xcode project
-      # ==========================================
+
+      # =========================================================
+      # GENERATE XCODE PROJECT
+      # =========================================================
+
       - name: Generate Xcode project
         if: env.BUILD_PROJECT_YML != ''
         shell: bash
@@ -346,7 +370,7 @@ jobs:
           set -e
 
           echo "=========================================="
-          echo "Generating Xcode project"
+          echo "GENERATING XCODE PROJECT"
           echo "=========================================="
 
           xcodegen generate
@@ -372,9 +396,11 @@ jobs:
           echo "BUILD_PROJECT=$PROJECT" \
             >> "$GITHUB_ENV"
 
-      # ==========================================
-      # 10. CocoaPods
-      # ==========================================
+
+      # =========================================================
+      # COCOAPODS
+      # =========================================================
+
       - name: Install CocoaPods dependencies
         shell: bash
         run: |
@@ -424,24 +450,28 @@ jobs:
           )
 
           if [ -n "$WORKSPACE" ]; then
+
             echo ""
             echo "Using CocoaPods workspace:"
             echo "$WORKSPACE"
 
             echo "BUILD_WORKSPACE=$WORKSPACE" \
               >> "$GITHUB_ENV"
+
           fi
 
-      # ==========================================
-      # 11. Inspect project
-      # ==========================================
+
+      # =========================================================
+      # INSPECT XCODE PROJECT
+      # =========================================================
+
       - name: Inspect Xcode project
         shell: bash
         run: |
           set -e
 
           echo "=========================================="
-          echo "Xcode project information"
+          echo "XCODE PROJECT INFORMATION"
           echo "=========================================="
 
           if [ -n "${BUILD_WORKSPACE:-}" ] \
@@ -451,6 +481,7 @@ jobs:
             echo "$BUILD_WORKSPACE"
 
             echo ""
+
             xcodebuild \
               -workspace "$BUILD_WORKSPACE" \
               -list
@@ -462,6 +493,7 @@ jobs:
             echo "$BUILD_PROJECT"
 
             echo ""
+
             xcodebuild \
               -project "$BUILD_PROJECT" \
               -list
@@ -473,16 +505,18 @@ jobs:
 
           fi
 
-      # ==========================================
-      # 12. Detect scheme
-      # ==========================================
+
+      # =========================================================
+      # DETECT SCHEME
+      # =========================================================
+
       - name: Detect build scheme
         shell: bash
         run: |
           set -e
 
           echo "=========================================="
-          echo "Detecting scheme"
+          echo "DETECTING BUILD SCHEME"
           echo "=========================================="
 
           LIST=""
@@ -554,16 +588,18 @@ jobs:
           echo "BUILD_SCHEME=$SCHEME" \
             >> "$GITHUB_ENV"
 
-      # ==========================================
-      # 13. Show destinations
-      # ==========================================
+
+      # =========================================================
+      # DESTINATIONS
+      # =========================================================
+
       - name: Show available destinations
         shell: bash
         run: |
           set -e
 
           echo "=========================================="
-          echo "Available destinations"
+          echo "AVAILABLE DESTINATIONS"
           echo "=========================================="
 
           if [ -n "${BUILD_WORKSPACE:-}" ] \
@@ -583,23 +619,39 @@ jobs:
 
           fi
 
-      # ==========================================
-      # 14. Prepare build directories
-      # ==========================================
+
+      # =========================================================
+      # PREPARE DIRECTORIES
+      # =========================================================
+
       - name: Prepare build directories
         shell: bash
         run: |
           set -e
 
-          rm -rf "$GITHUB_WORKSPACE/build_output"
-          rm -rf "$GITHUB_WORKSPACE/ipa_output"
+          rm -rf \
+            "$GITHUB_WORKSPACE/build_output"
 
-          mkdir -p "$GITHUB_WORKSPACE/build_output"
-          mkdir -p "$GITHUB_WORKSPACE/ipa_output"
+          rm -rf \
+            "$GITHUB_WORKSPACE/ipa_output"
 
-      # ==========================================
-      # 15. Build unsigned iOS app
-      # ==========================================
+          rm -rf \
+            "$GITHUB_WORKSPACE/ipa_inspection"
+
+          mkdir -p \
+            "$GITHUB_WORKSPACE/build_output"
+
+          mkdir -p \
+            "$GITHUB_WORKSPACE/ipa_output"
+
+          mkdir -p \
+            "$GITHUB_WORKSPACE/ipa_inspection"
+
+
+      # =========================================================
+      # BUILD
+      # =========================================================
+
       - name: Build unsigned iOS app
         shell: bash
         run: |
@@ -692,16 +744,18 @@ jobs:
           echo "BUILD SUCCESSFUL"
           echo "=========================================="
 
-      # ==========================================
-      # 16. Locate .app
-      # ==========================================
+
+      # =========================================================
+      # LOCATE APP
+      # =========================================================
+
       - name: Locate built app
         shell: bash
         run: |
           set -e
 
           echo "=========================================="
-          echo "Locating built .app"
+          echo "LOCATING BUILT APP"
           echo "=========================================="
 
           APP_PATH=$(
@@ -735,6 +789,7 @@ jobs:
               | sort
 
             exit 1
+
           fi
 
           echo ""
@@ -768,16 +823,18 @@ jobs:
           echo "APP_PATH=$APP_PATH" \
             >> "$GITHUB_ENV"
 
-      # ==========================================
-      # 17. Create IPA
-      # ==========================================
+
+      # =========================================================
+      # PACKAGE IPA
+      # =========================================================
+
       - name: Package IPA
         shell: bash
         run: |
           set -e
 
           echo "=========================================="
-          echo "Creating Cinema66.ipa"
+          echo "CREATING CINEMA66.IPA"
           echo "=========================================="
 
           rm -rf \
@@ -799,11 +856,14 @@ jobs:
 
           echo ""
           echo "IPA created:"
+
           ls -lh Cinema66.ipa
 
-      # ==========================================
-      # 18. Verify IPA
-      # ==========================================
+
+      # =========================================================
+      # BASIC IPA VERIFICATION
+      # =========================================================
+
       - name: Verify IPA
         shell: bash
         run: |
@@ -817,22 +877,329 @@ jobs:
           fi
 
           echo "=========================================="
-          echo "IPA verification"
+          echo "IPA VERIFICATION"
           echo "=========================================="
 
           ls -lh "$IPA"
 
           echo ""
+          echo "IPA file type:"
+
+          file "$IPA"
+
+          echo ""
+          echo "Testing ZIP:"
+
+          unzip -t "$IPA"
+
+          echo ""
           echo "IPA contents:"
 
-          unzip -l "$IPA" | head -n 100
+          unzip -l "$IPA" | head -n 200
 
           echo ""
           echo "IPA verification successful."
 
-      # ==========================================
-      # 19. Upload IPA
-      # ==========================================
+
+      # =========================================================
+      # DETAILED IPA DIAGNOSTIC
+      # =========================================================
+
+      - name: Inspect IPA
+        shell: bash
+        run: |
+          set -e
+
+          IPA="$GITHUB_WORKSPACE/ipa_output/Cinema66.ipa"
+          INSPECT="$GITHUB_WORKSPACE/ipa_inspection"
+
+          echo "=========================================="
+          echo "IPA DIAGNOSTIC CHECK"
+          echo "=========================================="
+
+          if [ ! -f "$IPA" ]; then
+            echo "ERROR: IPA not found."
+            exit 1
+          fi
+
+          echo ""
+          echo "IPA:"
+          ls -lh "$IPA"
+
+          echo ""
+          echo "File type:"
+          file "$IPA"
+
+
+          # -------------------------------------------------------
+          # EXTRACT
+          # -------------------------------------------------------
+
+          echo ""
+          echo "=========================================="
+          echo "EXTRACTING IPA"
+          echo "=========================================="
+
+          rm -rf "$INSPECT"
+
+          mkdir -p "$INSPECT"
+
+          unzip -q \
+            "$IPA" \
+            -d "$INSPECT"
+
+
+          # -------------------------------------------------------
+          # PAYLOAD
+          # -------------------------------------------------------
+
+          echo ""
+          echo "=========================================="
+          echo "PAYLOAD CHECK"
+          echo "=========================================="
+
+          if [ ! -d "$INSPECT/Payload" ]; then
+            echo "ERROR: Payload directory missing."
+            exit 1
+          fi
+
+          find "$INSPECT/Payload" \
+            -maxdepth 2 \
+            -print
+
+
+          # -------------------------------------------------------
+          # APP
+          # -------------------------------------------------------
+
+          APP=$(
+            find "$INSPECT/Payload" \
+              -maxdepth 1 \
+              -type d \
+              -name "*.app" \
+              | head -n 1
+          )
+
+          if [ -z "$APP" ]; then
+            echo ""
+            echo "ERROR: No .app found inside Payload."
+            exit 1
+          fi
+
+          echo ""
+          echo "App:"
+          echo "$APP"
+
+
+          # -------------------------------------------------------
+          # INFO PLIST
+          # -------------------------------------------------------
+
+          echo ""
+          echo "=========================================="
+          echo "INFO.PLIST"
+          echo "=========================================="
+
+          if [ ! -f "$APP/Info.plist" ]; then
+            echo "ERROR: Info.plist missing."
+            exit 1
+          fi
+
+          echo "Info.plist exists."
+
+          echo ""
+          echo "Bundle ID:"
+
+          /usr/libexec/PlistBuddy \
+            -c "Print :CFBundleIdentifier" \
+            "$APP/Info.plist"
+
+
+          echo ""
+          echo "Display Name:"
+
+          /usr/libexec/PlistBuddy \
+            -c "Print :CFBundleDisplayName" \
+            "$APP/Info.plist" \
+            || true
+
+
+          echo ""
+          echo "Version:"
+
+          /usr/libexec/PlistBuddy \
+            -c "Print :CFBundleShortVersionString" \
+            "$APP/Info.plist"
+
+
+          echo ""
+          echo "Build:"
+
+          /usr/libexec/PlistBuddy \
+            -c "Print :CFBundleVersion" \
+            "$APP/Info.plist"
+
+
+          # -------------------------------------------------------
+          # EXECUTABLE
+          # -------------------------------------------------------
+
+          echo ""
+          echo "=========================================="
+          echo "EXECUTABLE CHECK"
+          echo "=========================================="
+
+          EXECUTABLE=$(
+            /usr/libexec/PlistBuddy \
+              -c "Print :CFBundleExecutable" \
+              "$APP/Info.plist"
+          )
+
+          echo "Executable:"
+          echo "$EXECUTABLE"
+
+          if [ ! -f "$APP/$EXECUTABLE" ]; then
+            echo ""
+            echo "ERROR: Executable does not exist."
+
+            echo "Expected:"
+            echo "$APP/$EXECUTABLE"
+
+            exit 1
+          fi
+
+          echo ""
+          echo "Executable exists."
+
+          echo ""
+          file "$APP/$EXECUTABLE"
+
+
+          # -------------------------------------------------------
+          # ARCHITECTURE
+          # -------------------------------------------------------
+
+          echo ""
+          echo "=========================================="
+          echo "BINARY ARCHITECTURE"
+          echo "=========================================="
+
+          lipo \
+            -info \
+            "$APP/$EXECUTABLE" \
+            2>&1 || true
+
+
+          # -------------------------------------------------------
+          # CODE SIGNATURE
+          # -------------------------------------------------------
+
+          echo ""
+          echo "=========================================="
+          echo "CODE SIGNATURE"
+          echo "=========================================="
+
+          codesign \
+            -dvvv \
+            "$APP" \
+            2>&1 || true
+
+
+          # -------------------------------------------------------
+          # SIGNATURE VERIFICATION
+          # -------------------------------------------------------
+
+          echo ""
+          echo "=========================================="
+          echo "CODE SIGNATURE VERIFICATION"
+          echo "=========================================="
+
+          codesign \
+            --verify \
+            --deep \
+            --strict \
+            "$APP" \
+            2>&1 || true
+
+
+          # -------------------------------------------------------
+          # MOBILEPROVISION
+          # -------------------------------------------------------
+
+          echo ""
+          echo "=========================================="
+          echo "MOBILEPROVISION"
+          echo "=========================================="
+
+          if [ -f "$APP/embedded.mobileprovision" ]; then
+
+            echo "embedded.mobileprovision: FOUND"
+
+          else
+
+            echo "embedded.mobileprovision: NOT FOUND"
+
+          fi
+
+
+          # -------------------------------------------------------
+          # ENTITLEMENTS
+          # -------------------------------------------------------
+
+          echo ""
+          echo "=========================================="
+          echo "ENTITLEMENTS"
+          echo "=========================================="
+
+          codesign \
+            -d \
+            --entitlements :- \
+            "$APP" \
+            2>&1 || true
+
+
+          # -------------------------------------------------------
+          # APP CONTENTS
+          # -------------------------------------------------------
+
+          echo ""
+          echo "=========================================="
+          echo "APP CONTENTS"
+          echo "=========================================="
+
+          find "$APP" \
+            -maxdepth 2 \
+            -print \
+            | sort \
+            | head -n 300
+
+
+          # -------------------------------------------------------
+          # FINAL
+          # -------------------------------------------------------
+
+          echo ""
+          echo "=========================================="
+          echo "IPA DIAGNOSTIC FINISHED"
+          echo "=========================================="
+
+          echo ""
+          echo "IPA:"
+          ls -lh "$IPA"
+
+          echo ""
+          echo "App:"
+          echo "$APP"
+
+          echo ""
+          echo "If the signing application rejects this IPA,"
+          echo "send the output of this step."
+
+
+      # =========================================================
+      # UPLOAD IPA
+      # =========================================================
+
       - name: Upload Cinema 66 IPA
         uses: actions/upload-artifact@v4
         with:
@@ -841,9 +1208,11 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      # ==========================================
-      # 20. Upload diagnostics on failure
-      # ==========================================
+
+      # =========================================================
+      # UPLOAD DIAGNOSTICS
+      # =========================================================
+
       - name: Upload build diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
@@ -851,5 +1220,7 @@ jobs:
           name: Cinema66-Build-Diagnostics
           path: |
             build_output/
+            ipa_inspection/
+            ipa_output/
           if-no-files-found: ignore
           retention-days: 7
