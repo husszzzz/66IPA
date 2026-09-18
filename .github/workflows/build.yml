@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - master
+
   workflow_dispatch:
 
 jobs:
@@ -13,22 +14,24 @@ jobs:
 
     steps:
 
-      # =========================
-      # Checkout
-      # =========================
+      # ==========================================
+      # 1. Checkout Repository
+      # ==========================================
       - name: Checkout Repository
         uses: actions/checkout@v4
 
 
-      # =========================
-      # Extract Source
-      # =========================
+      # ==========================================
+      # 2. Extract Source Code
+      # ==========================================
       - name: Extract Source Code
         shell: bash
         run: |
           set -e
 
-          echo "Extracting iOS source..."
+          echo "========================================"
+          echo "Extracting iOS Source Code"
+          echo "========================================"
 
           rm -rf ios_source
 
@@ -41,20 +44,23 @@ jobs:
           echo ""
 
           echo "Searching for Xcode projects..."
+
           find ios_source \
             \( -name "*.xcworkspace" -o -name "*.xcodeproj" \) \
             -print
 
 
-      # =========================
-      # Find Xcode Project
-      # =========================
+      # ==========================================
+      # 3. Find Xcode Project
+      # ==========================================
       - name: Find Xcode Project
         shell: bash
         run: |
           set -e
 
-          echo "Searching for Xcode workspace..."
+          echo "========================================"
+          echo "Finding Xcode Project"
+          echo "========================================"
 
           WORKSPACE=$(find ios_source \
             -type d \
@@ -67,38 +73,55 @@ jobs:
             -print -quit)
 
           if [ -n "$WORKSPACE" ]; then
-            echo "WORKSPACE=$WORKSPACE" >> "$GITHUB_ENV"
+
             echo "Found workspace:"
             echo "$WORKSPACE"
 
+            echo "WORKSPACE=$WORKSPACE" >> "$GITHUB_ENV"
+
           elif [ -n "$PROJECT" ]; then
-            echo "PROJECT=$PROJECT" >> "$GITHUB_ENV"
+
             echo "Found project:"
             echo "$PROJECT"
 
+            echo "PROJECT=$PROJECT" >> "$GITHUB_ENV"
+
           else
+
             echo "ERROR: No .xcodeproj or .xcworkspace found."
             exit 1
+
           fi
 
 
-      # =========================
-      # Install Dependencies
-      # =========================
+      # ==========================================
+      # 4. Install Dependencies
+      # ==========================================
       - name: Install Dependencies
         shell: bash
         run: |
           set -e
 
+          echo "========================================"
+          echo "Installing Dependencies"
+          echo "========================================"
+
           if [ -n "${WORKSPACE:-}" ]; then
+
             PROJECT_DIR=$(dirname "$WORKSPACE")
+
           elif [ -n "${PROJECT:-}" ]; then
+
             PROJECT_DIR=$(dirname "$PROJECT")
+
           else
+
             echo "ERROR: Project path is missing."
             exit 1
+
           fi
 
+          echo ""
           echo "Project directory:"
           echo "$PROJECT_DIR"
 
@@ -110,46 +133,83 @@ jobs:
             -print -quit)
 
           if [ -n "$PODFILE" ]; then
+
+            echo ""
             echo "Podfile found:"
             echo "$PODFILE"
+
+            echo ""
+            echo "Installing CocoaPods dependencies..."
 
             pod install --repo-update
 
           else
+
+            echo ""
             echo "No Podfile found."
             echo "Skipping CocoaPods."
+
           fi
 
 
-      # =========================
-      # Build App
-      # =========================
+      # ==========================================
+      # 5. Build App - Unsigned
+      # ==========================================
       - name: Build App (Unsigned)
         shell: bash
         run: |
           set -e
 
+          echo "========================================"
+          echo "Preparing Build Directory"
+          echo "========================================"
+
+          # حذف مجلد البناء يدوياً
+          # حتى لا يحدث CLEAN FAILED داخل xcodebuild
+          rm -rf "$GITHUB_WORKSPACE/build_output"
+
           mkdir -p "$GITHUB_WORKSPACE/build_output"
+
+          echo ""
+          echo "Build directory:"
+          echo "$GITHUB_WORKSPACE/build_output"
+
+
+          # ======================================
+          # Build Workspace
+          # ======================================
 
           if [ -n "${WORKSPACE:-}" ]; then
 
-            echo "Building workspace:"
+            echo ""
+            echo "========================================"
+            echo "Building Xcode Workspace"
+            echo "========================================"
+
+            echo "Workspace:"
             echo "$WORKSPACE"
 
             PROJECT_DIR=$(dirname "$WORKSPACE")
+
             cd "$PROJECT_DIR"
 
             WORKSPACE_NAME=$(basename "$WORKSPACE")
 
-            echo "Workspace:"
+            echo ""
+            echo "Workspace name:"
             echo "$WORKSPACE_NAME"
+
 
             echo ""
             echo "Available schemes:"
+            echo "----------------------------------------"
+
             xcodebuild \
               -workspace "$WORKSPACE_NAME" \
               -list
 
+
+            # استخراج أول Scheme
             SCHEME=$(xcodebuild \
               -workspace "$WORKSPACE_NAME" \
               -list |
@@ -164,16 +224,28 @@ jobs:
                 }
               ')
 
+
             if [ -z "$SCHEME" ]; then
+
+              echo ""
               echo "ERROR: Could not detect scheme."
               exit 1
+
             fi
 
+
             echo ""
-            echo "Using scheme:"
+            echo "Selected scheme:"
             echo "$SCHEME"
 
-            xcodebuild clean build \
+
+            echo ""
+            echo "========================================"
+            echo "Starting Xcode Build"
+            echo "========================================"
+
+
+            xcodebuild build \
               -workspace "$WORKSPACE_NAME" \
               -scheme "$SCHEME" \
               -configuration Release \
@@ -184,25 +256,41 @@ jobs:
               CONFIGURATION_BUILD_DIR="$GITHUB_WORKSPACE/build_output"
 
 
+          # ======================================
+          # Build Xcode Project
+          # ======================================
+
           elif [ -n "${PROJECT:-}" ]; then
 
-            echo "Building project:"
+            echo ""
+            echo "========================================"
+            echo "Building Xcode Project"
+            echo "========================================"
+
+            echo "Project:"
             echo "$PROJECT"
 
             PROJECT_DIR=$(dirname "$PROJECT")
+
             cd "$PROJECT_DIR"
 
             PROJECT_NAME=$(basename "$PROJECT")
 
-            echo "Project:"
+            echo ""
+            echo "Project name:"
             echo "$PROJECT_NAME"
+
 
             echo ""
             echo "Available schemes:"
+            echo "----------------------------------------"
+
             xcodebuild \
               -project "$PROJECT_NAME" \
               -list
 
+
+            # استخراج أول Scheme
             SCHEME=$(xcodebuild \
               -project "$PROJECT_NAME" \
               -list |
@@ -217,16 +305,28 @@ jobs:
                 }
               ')
 
+
             if [ -z "$SCHEME" ]; then
+
+              echo ""
               echo "ERROR: Could not detect scheme."
               exit 1
+
             fi
 
+
             echo ""
-            echo "Using scheme:"
+            echo "Selected scheme:"
             echo "$SCHEME"
 
-            xcodebuild clean build \
+
+            echo ""
+            echo "========================================"
+            echo "Starting Xcode Build"
+            echo "========================================"
+
+
+            xcodebuild build \
               -project "$PROJECT_NAME" \
               -scheme "$SCHEME" \
               -configuration Release \
@@ -236,33 +336,34 @@ jobs:
               CODE_SIGNING_ALLOWED=NO \
               CONFIGURATION_BUILD_DIR="$GITHUB_WORKSPACE/build_output"
 
+
           else
 
+            echo ""
             echo "ERROR: No Xcode project available."
             exit 1
 
           fi
 
 
-      # =========================
-      # Show Build Output
-      # =========================
+      # ==========================================
+      # 6. Show Build Output
+      # ==========================================
       - name: Show Build Output
         shell: bash
         run: |
-          echo "Build output:"
+          set -e
+
+          echo "========================================"
+          echo "Build Output"
+          echo "========================================"
+
           find "$GITHUB_WORKSPACE/build_output" \
             -maxdepth 2 \
             -print
 
-
-      # =========================
-      # Create IPA
-      # =========================
-      - name: Create IPA File
-        shell: bash
-        run: |
-          set -e
+          echo ""
+          echo "Searching for .app..."
 
           APP_PATH=$(find "$GITHUB_WORKSPACE/build_output" \
             -maxdepth 1 \
@@ -271,35 +372,83 @@ jobs:
             -print -quit)
 
           if [ -z "$APP_PATH" ]; then
-            echo "ERROR: No .app found."
+
+            echo ""
+            echo "ERROR: No .app was produced."
             exit 1
+
           fi
 
-          echo "Found application:"
+          echo ""
+          echo "APP FOUND:"
           echo "$APP_PATH"
 
+
+      # ==========================================
+      # 7. Create IPA
+      # ==========================================
+      - name: Create IPA File
+        shell: bash
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "Creating IPA"
+          echo "========================================"
+
+          APP_PATH=$(find "$GITHUB_WORKSPACE/build_output" \
+            -maxdepth 1 \
+            -type d \
+            -name "*.app" \
+            -print -quit)
+
+          if [ -z "$APP_PATH" ]; then
+
+            echo "ERROR: No .app found."
+            exit 1
+
+          fi
+
+          echo ""
+          echo "Application:"
+          echo "$APP_PATH"
+
+
+          # حذف Payload القديم
           rm -rf "$GITHUB_WORKSPACE/Payload"
 
           mkdir -p "$GITHUB_WORKSPACE/Payload"
 
-          cp -R "$APP_PATH" "$GITHUB_WORKSPACE/Payload/"
+
+          # نسخ التطبيق داخل Payload
+          cp -R "$APP_PATH" \
+            "$GITHUB_WORKSPACE/Payload/"
+
 
           cd "$GITHUB_WORKSPACE"
 
+
+          # حذف IPA قديم إن وجد
           rm -f hassany_app.ipa
 
-          zip -qr hassany_app.ipa Payload
+
+          # إنشاء IPA
+          zip -qr \
+            hassany_app.ipa \
+            Payload
+
 
           echo ""
-          echo "================================"
+          echo "========================================"
           echo "IPA CREATED SUCCESSFULLY"
-          echo "================================"
+          echo "========================================"
+
           ls -lh hassany_app.ipa
 
 
-      # =========================
-      # Upload IPA
-      # =========================
+      # ==========================================
+      # 8. Upload IPA Artifact
+      # ==========================================
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
