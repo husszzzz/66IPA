@@ -384,6 +384,34 @@ jobs:
             echo "CFBundleIdentifier already set: $CURRENT_ID"
           fi
 
+          # نفس الفكرة لـ CFBundleExecutable: لو مفقود،
+          # نحدده تلقائيًا من اسم الـ .app نفسه (بدون .app).
+          CURRENT_EXEC=$(
+            /usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$PLIST" 2>/dev/null || true
+          )
+
+          if [ -z "$CURRENT_EXEC" ]; then
+            APP_BASENAME=$(basename "$APP_PATH")
+            EXEC_NAME="${APP_BASENAME%.app}"
+
+            echo "CFBundleExecutable missing or empty, patching to $EXEC_NAME"
+
+            /usr/libexec/PlistBuddy \
+              -c "Add :CFBundleExecutable string $EXEC_NAME" \
+              "$PLIST" 2>/dev/null || \
+            /usr/libexec/PlistBuddy \
+              -c "Set :CFBundleExecutable $EXEC_NAME" \
+              "$PLIST"
+
+            if [ ! -f "$APP_PATH/$EXEC_NAME" ]; then
+              echo "WARNING: no file named '$EXEC_NAME' found inside the .app."
+              echo "Files actually inside the .app:"
+              find "$APP_PATH" -maxdepth 1 -type f -perm +111 -print
+            fi
+          else
+            echo "CFBundleExecutable already set: $CURRENT_EXEC"
+          fi
+
       - name: Verify Info.plist
         shell: bash
         run: |
