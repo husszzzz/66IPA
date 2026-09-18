@@ -1,0 +1,52 @@
+name: Build Unsigned Median IPA
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Extract Source Code
+        run: |
+          # فك الضغط عن الملف تلقائياً داخل السيرفر
+          tar -xzf ios_source.tar.gz
+
+      - name: Install Dependencies
+        run: |
+          pod install --repo-update
+
+      - name: Build App (Unsigned)
+        run: |
+          # استخراج مساحة العمل والمخطط والبناء بدون توقيع
+          WORKSPACE=$(ls | grep .xcworkspace | head -1)
+          SCHEME=$(xcodebuild -workspace "$WORKSPACE" -list | awk '/Schemes:/{getline; print $1}')
+          
+          xcodebuild clean build \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CONFIGURATION_BUILD_DIR="$(pwd)/build"
+
+      - name: Create IPA File
+        run: |
+          # تغليف التطبيق بصيغة IPA
+          mkdir -p Payload
+          mv build/*.app Payload/
+          zip -qr hassany_app.ipa Payload
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Hassany_Unsigned_IPA
+          path: hassany_app.ipa
